@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime output
+logs/
+data/local/*.duckdb
+data/local/*.sqlite
+data/export/job_*/
+!data/export/job_sample/
+data/report/
+
+# Sensitive config (contains passwords)
+config/env.yml
+
+# IDE / OS
+.claude/
+.vscode/
+*.swp
+Thumbs.db
