@@ -7,7 +7,7 @@ from pathlib import Path
 from engine.connection import connect_target
 from engine.context import RunContext
 from engine.path_utils import resolve_path
-from engine.sql_utils import sort_sql_files, resolve_table_name, extract_sqlname_from_csv
+from engine.sql_utils import sort_sql_files, resolve_table_name, extract_sqlname_from_csv, extract_params_from_csv
 
 
 def _sha256_file(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
@@ -29,19 +29,16 @@ def run(ctx: RunContext):
 
     if ctx.mode == "plan":
         logger.info("LOAD stage skipped (plan mode)")
-        logger.info("LOAD stage end")
         return
 
     export_cfg = job_cfg.get("export", {})
     if not export_cfg:
         logger.info("LOAD stage skipped (no export config)")
-        logger.info("LOAD stage end")
         return
 
     target_cfg = job_cfg.get("target", {})
     if not target_cfg:
         logger.info("LOAD stage skipped (no target config)")
-        logger.info("LOAD stage end")
         return
 
     export_base = resolve_path(ctx, export_cfg.get("out_dir", "data/export"))
@@ -55,20 +52,50 @@ def run(ctx: RunContext):
     ])
     if not csv_files:
         logger.warning("No CSV/CSV.GZ files found in %s", export_dir)
-        logger.info("LOAD stage end")
         return
 
     sql_dir = resolve_path(ctx, export_cfg.get("sql_dir", "sql/export"))
     sql_files = sort_sql_files(sql_dir)
     sql_map = {p.stem: p for p in sql_files}
 
+    # ── --include 필터: export와 동일하게 CSV도 필터링 ──
+    include_patterns = getattr(ctx, "include_patterns", []) or []
+    if include_patterns:
+        before = len(csv_files)
+        csv_files = [
+            f for f in csv_files
+            if any(pat.lower() in extract_sqlname_from_csv(f).lower()
+                   for pat in include_patterns)
+        ]
+        logger.info("LOAD --include filter applied: %d -> %d files (patterns: %s)",
+                     before, len(csv_files), include_patterns)
+        if not csv_files:
+            logger.warning("--include filter resulted in no CSV files to load (patterns=%s)",
+                           include_patterns)
+            return
+
     tgt_type = (target_cfg.get("type") or "").strip().lower()
     schema = (target_cfg.get("schema") or "").strip() or None  # None이면 스키마 없음
 
-    if schema:
-        logger.info("LOAD target type=%s | schema=%s | csv_count=%d", tgt_type, schema, len(csv_files))
+    # ── load.mode 결정 ──
+    load_cfg = job_cfg.get("load", {})
+    if tgt_type == "oracle":
+        load_mode = load_cfg.get("mode", "delete")
+        if load_mode in ("replace", "truncate"):
+            logger.warning("Oracle: load.mode=%s not supported, falling back to delete", load_mode)
+            load_mode = "delete"
     else:
-        logger.info("LOAD target type=%s | csv_count=%d", tgt_type, len(csv_files))
+        load_mode = load_cfg.get("mode", "replace")
+    if load_mode not in ("replace", "truncate", "append", "delete"):
+        logger.warning("Unknown load.mode=%s, using replace", load_mode)
+        load_mode = "replace"
+
+    if schema:
+        logger.info("LOAD target type=%s | schema=%s | csv_count=%d | load.mode=%s",
+                     tgt_type, schema, len(csv_files), load_mode)
+    else:
+        logger.info("LOAD target type=%s | csv_count=%d | load.mode=%s",
+                     tgt_type, len(csv_files), load_mode)
 
     # ----------------------------------------
     # 연결 팩토리 사용 + Adapter별 초기화
@@ -84,7 +111,8 @@ def run(ctx: RunContext):
             _ensure_history(conn, schema)
             _run_load_loop(ctx, logger, csv_files, sql_map, conn_type,
                            load_fn=lambda table, csv_path, file_hash:
-                               load_csv(conn, ctx.job_name, table, csv_path, file_hash, ctx.mode, schema))
+                               load_csv(conn, ctx.job_name, table, csv_path, file_hash,
+                                        ctx.mode, schema, load_mode=load_mode))
 
         elif conn_type == "sqlite3":
             from adapters.targets.sqlite_target import load_csv, _ensure_history
@@ -93,13 +121,16 @@ def run(ctx: RunContext):
                 logger.info("SQLite: schema not supported, ignoring schema setting (schema=%s)", schema)
             _run_load_loop(ctx, logger, csv_files, sql_map, conn_type,
                            load_fn=lambda table, csv_path, file_hash:
-                               load_csv(conn, ctx.job_name, table, csv_path, file_hash, ctx.mode))
+                               load_csv(conn, ctx.job_name, table, csv_path, file_hash,
+                                        ctx.mode, load_mode=load_mode))
 
         elif conn_type == "oracle":
             from adapters.targets.oracle_target import load_csv
             _run_load_loop(ctx, logger, csv_files, sql_map, conn_type,
                            load_fn=lambda table, csv_path, file_hash:
-                               load_csv(conn, ctx.job_name, table, csv_path, file_hash, ctx.mode, schema))
+                               load_csv(conn, ctx.job_name, table, csv_path, file_hash,
+                                        ctx.mode, schema, load_mode=load_mode,
+                                        params=extract_params_from_csv(csv_path)))
     finally:
         conn.close()
 

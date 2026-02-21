@@ -66,6 +66,7 @@ def export_sql_to_csv(
             else:
                 f = open(tmp_file, "w", newline="", encoding="utf-8")
 
+            interrupted = False
             with f:
                 writer = csv.writer(f)
                 writer.writerow(columns)
@@ -73,7 +74,8 @@ def export_sql_to_csv(
                 while True:
                     if stop_event.is_set():
                         logger.warning("Export interrupted")
-                        break   
+                        interrupted = True
+                        break
                     # fetchmany block 구간
                     rows = cursor.fetchmany(fetch_size)
                     if not rows:
@@ -92,6 +94,12 @@ def export_sql_to_csv(
                         if now - last_log_ts >= 120:
                             logger.info("CSV progress: %d rows (heartbeat)", total_rows)
                             last_log_ts = now
+
+            if interrupted:
+                if tmp_file.exists():
+                    tmp_file.unlink()
+                logger.warning("Incomplete file removed: %s", out_file.name)
+                return total_rows
 
             tmp_file.replace(out_file)
             logger.debug("File committed: %s", out_file)

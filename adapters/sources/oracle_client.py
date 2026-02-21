@@ -54,6 +54,7 @@ def get_oracle_conn(host_cfg):
         user=host_cfg["user"],
         password=host_cfg["password"],
         dsn=host_cfg["dsn"],
+        expire_time=10,  # 10분마다 TCP keepalive → 방화벽 idle timeout 방지
     )
 
     logger.debug("Oracle connection opened | dsn=%s", host_cfg["dsn"])

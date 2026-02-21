@@ -30,12 +30,14 @@ def setup_logging(log_dir: Path, debug: bool):
     level = logging.DEBUG if debug else logging.INFO
 
     if debug:
-        fmt = logging.Formatter(
+        file_fmt = logging.Formatter(
             "%(asctime)s | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(funcName)s | %(message)s",
             "%Y-%m-%d %H:%M:%S",
         )
+        console_fmt = file_fmt
     else:
-        fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", "%Y-%m-%d %H:%M:%S")
+        file_fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", "%Y-%m-%d %H:%M:%S")
+        console_fmt = logging.Formatter("%(levelname)s | %(message)s")
 
     root = logging.getLogger()
     root.setLevel(level)
@@ -44,12 +46,12 @@ def setup_logging(log_dir: Path, debug: bool):
 
     fh = logging.FileHandler(log_file, encoding="utf-8")
     fh.setLevel(level)
-    fh.setFormatter(fmt)
+    fh.setFormatter(file_fmt)
     root.addHandler(fh)
 
     sh = logging.StreamHandler()
     sh.setLevel(level)
-    sh.setFormatter(fmt)
+    sh.setFormatter(console_fmt)
     root.addHandler(sh)
 
     logger = logging.getLogger("runner")
@@ -79,7 +81,13 @@ def resolve_retry_run_id(base_dir: Path, job_name: str, logger) -> str:
     if not job_dir.exists():
         logger.warning("RETRY: no directory found → generating new run_id")
         return generate_run_id(base_dir, job_name)
-    for d in sorted(job_dir.iterdir(), reverse=True):
+    def _run_number(d: Path) -> int:
+        try:
+            return int(d.name.rsplit("_", 1)[-1])
+        except (ValueError, IndexError):
+            return -1
+
+    for d in sorted(job_dir.iterdir(), key=_run_number, reverse=True):
         if not d.is_dir():
             continue
         run_info_path = d / "run_info.json"
@@ -264,6 +272,7 @@ def run_pipeline(ctx: RunContext):
 # Main
 # ────────────────────────────────────────────────────────────
 def main():
+    stop_event.clear()
     job_start_time = time.time()
     parser = argparse.ArgumentParser(
         description="batch_runner — Oracle/Vertica → CSV → Local DB pipeline",
@@ -351,7 +360,14 @@ def main():
     env_path = Path(args.env)
 
     job_config = yaml.safe_load(job_path.read_text(encoding="utf-8"))
+    if not job_config or not isinstance(job_config, dict):
+        print(f"Error: job file is empty or invalid: {job_path}")
+        sys.exit(1)
+
     env_config = yaml.safe_load(env_path.read_text(encoding="utf-8"))
+    if not env_config or not isinstance(env_config, dict):
+        print(f"Error: env file is empty or invalid: {env_path}")
+        sys.exit(1)
 
     # --set override 적용
     if args.overrides:
@@ -419,25 +435,44 @@ def main():
     if params:
         logger.info(" Params    : %s", ", ".join(f"{k}={v}" for k, v in params.items()))
 
-        # ===== 여기 추가 =====
         try:
-            from stages.export_stage import expand_params
-            expanded_list = expand_params(params)
+            from stages.export_stage import expand_params, expand_range_value
+            from engine.sql_utils import detect_used_params
 
             for k, v in params.items():
                 v_str = str(v).strip()
 
                 if ":" in v_str:
-                    start, end = v_str.split(":", 1)
-                    logger.info(" Expanded  : %s=%d values (%s~%s)", k, len(expanded_list), start, end)
+                    vals = expand_range_value(v_str)
+                    logger.info(" Expanded  : %s=%d values", k, len(vals))
                 elif "," in v_str:
                     count = len(v_str.split(","))
                     logger.info(" Expanded  : %s=%d values", k, count)
                 else:
                     logger.info(" Expanded  : %s=1 value (%s)", k, v_str)
+
+            # Total tasks: SQL별 사용 파라미터만 확장하여 정확 계산
+            sql_dir_str = export_cfg.get("sql_dir", "")
+            if sql_dir_str:
+                from engine.sql_utils import sort_sql_files
+                sql_dir_path = work_dir / sql_dir_str
+                sql_files = sort_sql_files(sql_dir_path)
+                if ctx.include_patterns:
+                    sql_files = [
+                        f for f in sql_files
+                        if any(pat.lower() in f.relative_to(sql_dir_path).as_posix().lower()
+                               or pat.lower() in f.stem.lower()
+                               for pat in ctx.include_patterns)
+                    ]
+                total_tasks = 0
+                for sf in sql_files:
+                    sql_text = sf.read_text(encoding="utf-8")
+                    used = detect_used_params(sql_text, params)
+                    rel = {k: v for k, v in params.items() if k in used}
+                    total_tasks += len(expand_params(rel)) if rel else 1
+                logger.info(" Total Tasks: %d (sql=%d)", total_tasks, len(sql_files))
         except Exception as e:
             logger.debug("Param expand preview skipped: %s", e)
-        # ===== 여기까지 추가 =====
 
     if ctx.include_patterns:
         logger.info(" Include   : %s", ctx.include_patterns)

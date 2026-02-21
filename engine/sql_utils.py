@@ -72,6 +72,50 @@ def extract_sqlname_from_csv(csv_path: Path) -> str:
 
     return stem.split("__", 1)[0]
 
+
+def extract_params_from_csv(csv_path: Path) -> dict:
+    """
+    CSV 파일명에서 파라미터 key=value를 추출.
+    파일명 규칙: {sqlname}__{host}__{param1}_{value1}__{param2}_{value2}...
+    예: a1__local__clsYymm_202003__productCode_LA0001__rateCode_0000.csv.gz
+    → {"clsYymm": "202003", "productCode": "LA0001", "rateCode": "0000"}
+    """
+    name = csv_path.name
+    if name.endswith(".csv.gz"):
+        stem = name[: -len(".csv.gz")]
+    elif name.endswith(".csv"):
+        stem = name[: -len(".csv")]
+    else:
+        stem = csv_path.stem
+
+    parts = stem.split("__")
+    # parts[0] = sqlname, parts[1] = host, parts[2:] = param_value pairs
+    params = {}
+    for part in parts[2:]:
+        idx = part.find("_")
+        if idx > 0:
+            key = part[:idx]
+            val = part[idx + 1:]
+            params[key] = val
+    return params
+
+
+def detect_used_params(sql_text: str, available_params: dict) -> set:
+    """SQL 텍스트에서 실제 사용되는 파라미터 키 집합 반환.
+    :param, ${param}, {#param} 세 가지 문법 감지.
+    문자열 리터럴('...' 안) 내의 :param은 제외."""
+    sql_no_strings = re.sub(r"'[^']*'", "''", sql_text)
+    used = set()
+    for k in available_params:
+        if re.search(rf'(?<![:\w]):{re.escape(k)}\b', sql_no_strings):
+            used.add(k)
+        if f'${{{k}}}' in sql_text:
+            used.add(k)
+        if f'{{#{k}}}' in sql_text:
+            used.add(k)
+    return used
+
+
 def _split_sql_tokens(sql_text: str):
     """
     SQL 텍스트를 (token, is_literal) 쌍의 리스트로 분리.

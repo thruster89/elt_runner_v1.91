@@ -119,25 +119,39 @@ def _create_table_from_csv(conn, table_name: str, csv_path: Path):
 
 
 def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
-             file_hash: str, mode: str) -> int:
+             file_hash: str, mode: str,
+             load_mode: str = "replace") -> int:
     """
     CSV를 SQLite 테이블에 적재. (pandas 미사용 → numexpr 로그 없음)
     테이블이 없으면 CSV 헤더 기반으로 자동 생성.
+    load_mode: replace(DROP+CREATE) | truncate(DELETE+INSERT) | append(INSERT)
     반환값: 적재된 row 수 (-1이면 skip)
     """
     file_size = csv_path.stat().st_size
     mtime = datetime.fromtimestamp(csv_path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
 
-    if mode != "retry" and _history_exists(conn, job_name, table_name, file_hash):
-        logger.info("LOAD skip (already loaded) | %s | %s", table_name, csv_path.name)
-        return -1
+    # replace/truncate 시 히스토리 체크 스킵
+    if load_mode == "append":
+        if mode != "retry" and _history_exists(conn, job_name, table_name, file_hash):
+            logger.info("LOAD skip (already loaded) | %s | %s", table_name, csv_path.name)
+            return -1
+
+    if load_mode == "replace" and _table_exists(conn, table_name):
+        logger.info("LOAD mode=replace → DROP TABLE %s", table_name)
+        conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+        conn.commit()
+
+    if load_mode == "truncate" and _table_exists(conn, table_name):
+        logger.info("LOAD mode=truncate → DELETE FROM %s", table_name)
+        conn.execute(f'DELETE FROM "{table_name}"')
+        conn.commit()
 
     # 테이블 없으면 자동 생성
     if not _table_exists(conn, table_name):
-        logger.info("테이블 없음 → 자동 생성: %s", table_name)
+        logger.info("Table not found, creating: %s", table_name)
         _create_table_from_csv(conn, table_name, csv_path)
     else:
-        logger.info("테이블 확인 OK: %s", table_name)
+        logger.debug("Table exists: %s", table_name)
 
     start = time.time()
     total_rows = 0
@@ -171,7 +185,8 @@ def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
     _insert_history(conn, job_name, table_name, str(csv_path), file_hash, file_size, mtime)
 
     elapsed = time.time() - start
-    logger.info("LOAD done | table=%s rows=%d elapsed=%.2fs", table_name, total_rows, elapsed)
+    logger.info("LOAD done | table=%s rows=%d elapsed=%.2fs | mode=%s",
+                table_name, total_rows, elapsed, load_mode)
 
     return total_rows
 

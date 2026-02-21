@@ -24,12 +24,10 @@ def run(ctx: RunContext):
     transform_cfg = ctx.job_config.get("transform")
     if not transform_cfg:
         logger.info("TRANSFORM stage skipped (no config)")
-        logger.info("TRANSFORM stage end")
         return
 
     if ctx.mode == "plan":
         logger.info("TRANSFORM stage skipped (plan mode)")
-        logger.info("TRANSFORM stage end")
         return
 
     sql_dir_str = transform_cfg.get("sql_dir")
@@ -37,19 +35,16 @@ def run(ctx: RunContext):
 
     if not sql_dir_str:
         logger.info("TRANSFORM stage skipped (no sql_dir configured)")
-        logger.info("TRANSFORM stage end")
         return
 
     sql_dir = resolve_path(ctx, sql_dir_str)
     if not sql_dir.exists():
         logger.warning("TRANSFORM sql_dir not found: %s", sql_dir)
-        logger.info("TRANSFORM stage end")
         return
 
     sql_files = sort_sql_files(sql_dir)
     if not sql_files:
         logger.info("TRANSFORM no SQL files in %s", sql_dir)
-        logger.info("TRANSFORM stage end")
         return
 
     target_cfg = ctx.job_config.get("target", {})
@@ -57,15 +52,9 @@ def run(ctx: RunContext):
 
     if not tgt_type:
         logger.warning("TRANSFORM stage skipped (no target config)")
-        logger.info("TRANSFORM stage end")
         return
 
-    try:
-        conn, conn_type, label = connect_target(ctx, target_cfg)
-    except Exception as e:
-        logger.exception("TRANSFORM failed to connect to target: %s", e)
-        logger.info("TRANSFORM stage end")
-        return
+    conn, conn_type, label = connect_target(ctx, target_cfg)
 
     logger.info("TRANSFORM target=%s | sql_count=%d | on_error=%s", label, len(sql_files), on_error)
 
@@ -112,9 +101,12 @@ def _execute(conn, conn_type, sql_text):
 
     elif conn_type == "sqlite3":
         cur = conn.cursor()
-        for stmt in statements:
-            cur.execute(stmt)
-        conn.commit()
+        try:
+            for stmt in statements:
+                cur.execute(stmt)
+            conn.commit()
+        finally:
+            cur.close()
 
     elif conn_type == "oracle":
         cur = conn.cursor()

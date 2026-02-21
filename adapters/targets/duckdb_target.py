@@ -79,32 +79,44 @@ def _table_exists(conn, schema: str, table_name: str) -> bool:
 
 
 def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
-             file_hash: str, mode: str, schema: str = None) -> int:
+             file_hash: str, mode: str, schema: str = None,
+             load_mode: str = "replace") -> int:
     """
     CSV를 DuckDB 테이블에 적재.
     schema 지정 시 해당 스키마에 생성/INSERT.
+    load_mode: replace(DROP+CREATE) | truncate(DELETE+INSERT) | append(INSERT)
     반환값: 적재된 row 수 (-1이면 skip)
     """
     file_size = csv_path.stat().st_size
     mtime = datetime.fromtimestamp(csv_path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
     full_table = f"{schema}.{table_name}" if schema else table_name
 
-    if mode != "retry" and _history_exists(conn, schema, job_name, full_table, file_hash):
-        logger.info("LOAD skip (already loaded) | %s | %s", full_table, csv_path.name)
-        return -1
+    # replace/truncate 시 히스토리 체크 스킵 (어차피 덮어쓰므로)
+    if load_mode == "append":
+        if mode != "retry" and _history_exists(conn, schema, job_name, full_table, file_hash):
+            logger.info("LOAD skip (already loaded) | %s | %s", full_table, csv_path.name)
+            return -1
 
     start = time.time()
     tbl = f'"{schema}"."{table_name}"' if schema else f'"{table_name}"'
 
+    if load_mode == "replace" and _table_exists(conn, schema, table_name):
+        logger.info("LOAD mode=replace → DROP TABLE %s", tbl)
+        conn.execute(f"DROP TABLE IF EXISTS {tbl}")
+
+    if load_mode == "truncate" and _table_exists(conn, schema, table_name):
+        logger.info("LOAD mode=truncate → DELETE FROM %s", tbl)
+        conn.execute(f"DELETE FROM {tbl}")
+
     if not _table_exists(conn, schema, table_name):
-        logger.info("테이블 없음 → 자동 생성: %s", tbl)
+        logger.info("Table not found, creating: %s", tbl)
         conn.execute(
             f"CREATE TABLE {tbl} AS SELECT * FROM read_csv_auto(?, header=True)",
             [str(csv_path)],
         )
         row_count = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
     else:
-        logger.info("테이블 확인 OK: %s", tbl)
+        logger.debug("Table exists: %s", tbl)
         before = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
         conn.execute(
             f"INSERT INTO {tbl} SELECT * FROM read_csv_auto(?, header=True)",
@@ -114,7 +126,8 @@ def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
     _insert_history(conn, schema, job_name, full_table, str(csv_path), file_hash, file_size, mtime)
 
     elapsed = time.time() - start
-    logger.info("LOAD done | table=%s rows=%d elapsed=%.2fs", full_table, row_count, elapsed)
+    logger.info("LOAD done | table=%s rows=%d elapsed=%.2fs | mode=%s",
+                full_table, row_count, elapsed, load_mode)
     return row_count
 
 

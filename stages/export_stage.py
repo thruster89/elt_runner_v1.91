@@ -13,7 +13,7 @@ from adapters.sources.oracle_client import init_oracle_client, get_oracle_conn
 from adapters.sources.vertica_client import get_vertica_conn
 from engine.context import RunContext
 from engine.path_utils import resolve_path
-from engine.sql_utils import sort_sql_files, render_sql
+from engine.sql_utils import sort_sql_files, render_sql, detect_used_params
 from engine.runtime_state import stop_event
 
 
@@ -218,7 +218,7 @@ def _make_task_key(sql_file: Path, param_set: dict) -> str:
 # ---------------------------
 # Plan mode: Dryrun report
 # ---------------------------
-def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
+def run_plan(ctx, sql_files, export_cfg, out_dir, ext):
     logger = ctx.logger
     source_sel = ctx.job_config.get("source", {})
     host_name = source_sel.get("host", "")
@@ -229,7 +229,12 @@ def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
     for sql_file in sql_files:
         sql_text_raw = sql_file.read_text(encoding="utf-8")
 
-        for param_set in param_sets:
+        # SQL별 사용 파라미터만 확장
+        used_keys = detect_used_params(sql_text_raw, ctx.params)
+        relevant_params = {k: v for k, v in ctx.params.items() if k in used_keys}
+        sql_param_sets = expand_params(relevant_params) if relevant_params else [{}]
+
+        for param_set in sql_param_sets:
             rendered = sanitize_sql(render_sql(sql_text_raw, param_set))
             csv_name = build_csv_name(
                 sqlname=sql_file.stem,
@@ -482,8 +487,6 @@ def run(ctx: RunContext):
             logger.warning("--include filter resulted in no SQL files to run (patterns=%s)", include_patterns)
             return
 
-    param_sets = expand_params(ctx.params)
-
     fmt = export_cfg.get("format", "csv")
     compression = export_cfg.get("compression", "none")
     overwrite = export_cfg.get("overwrite", False)
@@ -496,7 +499,7 @@ def run(ctx: RunContext):
     # PLAN 모드: dryrun report만 생성하고 종료
     # ----------------------------------------
     if ctx.mode == "plan":
-        run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext)
+        run_plan(ctx, sql_files, export_cfg, out_dir, ext)
         return
 
     # ----------------------------------------
@@ -589,6 +592,8 @@ def run(ctx: RunContext):
                                 rows=rows or 0, elapsed=elapsed)
 
         except Exception as e:
+            # 커넥션 오류 시 thread-local에서 제거 → 다음 task에서 새 커넥션 생성
+            _thread_local.__dict__.pop("conn", None)
             logger.exception("%s EXPORT failed: %s", prefix, e)
             _update_task_status(run_info_path, task_key, "failed", error=str(e))
 
@@ -596,8 +601,12 @@ def run(ctx: RunContext):
 
     tasks = []
     for idx, sql_file in enumerate(sql_files, 1):
-        for param_idx, param_set in enumerate(param_sets, 1):
-            tasks.append((sql_file, param_set, idx, len(sql_files), param_idx, len(param_sets)))
+        sql_text_raw = sql_file.read_text(encoding="utf-8")
+        used_keys = detect_used_params(sql_text_raw, ctx.params)
+        relevant_params = {k: v for k, v in ctx.params.items() if k in used_keys}
+        sql_param_sets = expand_params(relevant_params) if relevant_params else [{}]
+        for param_idx, param_set in enumerate(sql_param_sets, 1):
+            tasks.append((sql_file, param_set, idx, len(sql_files), param_idx, len(sql_param_sets)))
 
     # 전체 task를 pending으로 초기화 (retry 시 pending도 재실행 대상)
     for sql_file, param_set, *_ in tasks:

@@ -38,20 +38,20 @@ def _ensure_schema(cur, conn, schema: str, password: str):
     password: 새 유저 비밀번호 (없으면 schema 이름과 동일하게 설정)
     """
     if _schema_exists(cur, schema):
-        logger.debug("스키마 확인 OK: %s", schema.upper())
+        logger.debug("Schema exists: %s", schema.upper())
         return
 
     pwd = password or schema  # 비밀번호 미지정 시 스키마명과 동일
     s = schema.upper()
 
-    logger.info("스키마 없음 → 자동 생성: %s", s)
+    logger.info("Schema not found, creating: %s", s)
 
     cur.execute(f'CREATE USER "{s}" IDENTIFIED BY "{pwd}"')
     cur.execute(f'GRANT CONNECT, RESOURCE TO "{s}"')
     cur.execute(f'GRANT UNLIMITED TABLESPACE TO "{s}"')
     conn.commit()
 
-    logger.info("CREATE USER %s + GRANT 완료", s)
+    logger.info("CREATE USER %s + GRANT done", s)
 
 
 # --------------------------------------------------
@@ -179,12 +179,74 @@ def _create_table_from_csv(cur, conn, schema: str, table_name: str, csv_path: Pa
 # 메인 load 함수
 # --------------------------------------------------
 
+def _get_table_columns(cur, schema: str, table_name: str) -> list:
+    """테이블의 컬럼명 목록 반환 (UPPER)"""
+    if schema:
+        cur.execute(
+            "SELECT column_name FROM all_tab_columns WHERE owner = :1 AND table_name = :2 ORDER BY column_id",
+            (schema.upper(), table_name.upper()),
+        )
+    else:
+        cur.execute(
+            "SELECT column_name FROM user_tab_columns WHERE table_name = :1 ORDER BY column_id",
+            (table_name.upper(),),
+        )
+    return [row[0] for row in cur.fetchall()]
+
+
+def _delete_by_params(cur, conn, schema: str, table_name: str, params: dict):
+    """params 기반 WHERE 조건으로 DELETE 실행"""
+    tbl = _qualified(schema, table_name)
+
+    if not params:
+        cur.execute(f"DELETE FROM {tbl}")
+        conn.commit()
+        logger.info("DELETE %s | %d rows (no params, full delete)", tbl, cur.rowcount)
+        return
+
+    # Column matching with underscore-removal normalization (clsYymm -> CLS_YYMM)
+    table_cols = _get_table_columns(cur, schema, table_name)
+    norm_map = {col.replace("_", "").lower(): col for col in table_cols}
+
+    conditions = []
+    values = []
+    idx = 1
+    for key, val in params.items():
+        col_upper = key.upper()
+        if col_upper in table_cols:
+            matched_col = col_upper
+        else:
+            norm_key = key.replace("_", "").lower()
+            matched_col = norm_map.get(norm_key)
+            if matched_col:
+                logger.debug("DELETE param mapped: %s -> %s", key, matched_col)
+            else:
+                logger.warning("DELETE condition skipped (column not found): %s.%s", tbl, col_upper)
+                continue
+        conditions.append(f'"{matched_col}" = :{idx}')
+        values.append(val)
+        idx += 1
+
+    if not conditions:
+        raise ValueError(
+            f"DELETE 조건 컬럼 매칭 실패: {tbl} — 파라미터 키가 테이블 컬럼과 일치하지 않습니다. "
+            f"params={list(params.keys())}"
+        )
+
+    where = " AND ".join(conditions)
+    cur.execute(f"DELETE FROM {tbl} WHERE {where}", values)
+    logger.info("DELETE %s | %d rows | WHERE %s",
+                tbl, cur.rowcount, " AND ".join(conditions) if conditions else "(all)")
+
+
 def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
-             file_hash: str, mode: str, schema: str = None) -> int:
+             file_hash: str, mode: str, schema: str = None,
+             load_mode: str = "delete", params: dict = None) -> int:
     """
     CSV를 Oracle 테이블에 적재.
     schema 지정 시 해당 스키마에 테이블 생성/INSERT.
     테이블 없으면 CSV 헤더로 자동 생성.
+    load_mode: delete(params 기반 DELETE+INSERT) | append(INSERT)
     반환값: row 수 (-1이면 skip)
     """
     cur = conn.cursor()
@@ -195,15 +257,20 @@ def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
     try:
         _ensure_history(cur, conn, schema)
 
-        if mode != "retry" and _history_exists(cur, schema, job_name, full_table, file_hash):
-            logger.info("LOAD skip (already loaded) | %s | %s", full_table, csv_path.name)
-            return -1
+        # append 모드에서만 히스토리 체크
+        if load_mode == "append":
+            if mode != "retry" and _history_exists(cur, schema, job_name, full_table, file_hash):
+                logger.info("LOAD skip (already loaded) | %s | %s", full_table, csv_path.name)
+                return -1
 
         if not _table_exists(cur, schema, table_name):
-            logger.info("테이블 없음 → 자동 생성: %s", _qualified(schema, table_name))
+            logger.info("Table not found, creating: %s", _qualified(schema, table_name))
             _create_table_from_csv(cur, conn, schema, table_name, csv_path)
         else:
-            logger.info("테이블 확인 OK: %s", _qualified(schema, table_name))
+            logger.debug("Table exists: %s", _qualified(schema, table_name))
+            # delete 모드: INSERT 전 기존 데이터 삭제
+            if load_mode == "delete":
+                _delete_by_params(cur, conn, schema, table_name, params or {})
 
         start = time.time()
         total_rows = 0
@@ -232,7 +299,8 @@ def load_csv(conn, job_name: str, table_name: str, csv_path: Path,
                         file_hash, file_size, mtime)
 
         elapsed = time.time() - start
-        logger.info("LOAD done | table=%s rows=%d elapsed=%.2fs", full_table, total_rows, elapsed)
+        logger.info("LOAD done | table=%s rows=%d elapsed=%.2fs | mode=%s",
+                    full_table, total_rows, elapsed, load_mode)
         return total_rows
 
     finally:
@@ -263,8 +331,9 @@ def connect(env_config: dict, schema: str = None, schema_password: str = None):
         user=host_cfg["user"],
         password=host_cfg["password"],
         dsn=host_cfg["dsn"],
+        expire_time=10,  # 10분마다 TCP keepalive → 방화벽 idle timeout 방지
     )
-    logger.info("Oracle target 연결 (thin) | dsn=%s | user=%s", host_cfg["dsn"], host_cfg["user"])
+    logger.info("Oracle target connected (thin) | dsn=%s | user=%s", host_cfg["dsn"], host_cfg["user"])
 
     # 스키마 자동 생성 (schema 지정된 경우)
     if schema:

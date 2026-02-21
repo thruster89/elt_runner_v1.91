@@ -40,12 +40,10 @@ def run(ctx: RunContext):
     report_cfg = ctx.job_config.get("report")
     if not report_cfg:
         logger.info("REPORT stage skipped (no config)")
-        logger.info("REPORT stage end")
         return
 
     if ctx.mode == "plan":
         logger.info("REPORT stage skipped (plan mode)")
-        logger.info("REPORT stage end")
         return
 
     generated_csvs = []
@@ -105,8 +103,6 @@ def _run_csv_export(ctx, report_cfg, cfg) -> list:
     # report.source 결정: 기본값은 "target"
     report_source = (report_cfg.get("source") or "target").strip().lower()
     conn, conn_type, conn_label = _open_connection(ctx, report_source)
-    if conn is None:
-        return []
 
     logger.info(
         "REPORT csv export | db=%s sql_dir=%s out_dir=%s files=%d compression=%s",
@@ -149,11 +145,7 @@ def _open_connection(ctx, report_source: str):
 
     if report_source == "target":
         target_cfg = ctx.job_config.get("target", {})
-        try:
-            return connect_target(ctx, target_cfg)
-        except Exception as e:
-            logger.exception("REPORT failed to connect to target: %s", e)
-            return None, None, None
+        return connect_target(ctx, target_cfg)
 
     # source DB (oracle / vertica)
     from adapters.sources.oracle_client import init_oracle_client, get_oracle_conn
@@ -164,64 +156,64 @@ def _open_connection(ctx, report_source: str):
     host_name = source_sel.get("host", "")
     env_cfg   = ctx.env_config
 
-    try:
-        if src_type == "oracle":
-            oracle_cfg = env_cfg["sources"]["oracle"]
-            host_cfg = oracle_cfg["hosts"].get(host_name)
-            if not host_cfg:
-                raise RuntimeError(f"Oracle host not found: {host_name}")
-            init_oracle_client(oracle_cfg)
-            dsn = host_cfg.get("dsn") or f"{host_cfg.get('host')}:{host_cfg.get('port', 1521)}/{host_cfg.get('service_name', '')}"
-            label = f"oracle source ({dsn})"
-            return get_oracle_conn(host_cfg), "oracle", label
+    if src_type == "oracle":
+        oracle_cfg = env_cfg["sources"]["oracle"]
+        host_cfg = oracle_cfg["hosts"].get(host_name)
+        if not host_cfg:
+            raise RuntimeError(f"Oracle host not found: {host_name}")
+        init_oracle_client(oracle_cfg)
+        dsn = host_cfg.get("dsn") or f"{host_cfg.get('host')}:{host_cfg.get('port', 1521)}/{host_cfg.get('service_name', '')}"
+        label = f"oracle source ({dsn})"
+        return get_oracle_conn(host_cfg), "oracle", label
 
-        elif src_type == "vertica":
-            vertica_cfg = env_cfg["sources"]["vertica"]
-            host_cfg = vertica_cfg["hosts"].get(host_name)
-            if not host_cfg:
-                raise RuntimeError(f"Vertica host not found: {host_name}")
-            label = f"vertica ({host_name})"
-            return get_vertica_conn(host_cfg), "vertica", label
+    elif src_type == "vertica":
+        vertica_cfg = env_cfg["sources"]["vertica"]
+        host_cfg = vertica_cfg["hosts"].get(host_name)
+        if not host_cfg:
+            raise RuntimeError(f"Vertica host not found: {host_name}")
+        label = f"vertica ({host_name})"
+        return get_vertica_conn(host_cfg), "vertica", label
 
-        else:
-            logger.error("REPORT: unsupported source type: %s", src_type)
-            return None, None, None
-
-    except Exception as e:
-        logger.exception("REPORT failed to connect to source: %s", e)
-        return None, None, None
+    else:
+        raise ValueError(f"REPORT: unsupported source type: {src_type}")
 
 
 def _export_to_csv(conn, conn_type: str, sql_text: str, out_file: Path, compression: str) -> int:
     """SQL 실행 결과를 CSV 저장. row 수 반환."""
-    if conn_type == "duckdb":
-        rel = conn.execute(sql_text)
-        columns = [d[0] for d in rel.description]
-        fetcher = lambda: rel.fetchmany(10000)
-    else:
-        cur = conn.cursor()
-        if conn_type == "oracle":
-            cur.arraysize = 10000
-        cur.execute(sql_text)
-        columns = [d[0] for d in cur.description]
-        fetcher = lambda: cur.fetchmany(10000)
-
     open_fn = gzip.open if compression == "gzip" else open
     row_count = 0
 
-    try:
+    if conn_type == "duckdb":
+        rel = conn.execute(sql_text)
+        columns = [d[0] for d in rel.description]
         with open_fn(out_file, "wt", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(columns)
             while True:
-                batch = fetcher()
+                batch = rel.fetchmany(10000)
                 if not batch:
                     break
                 for row in batch:
                     writer.writerow(["" if v is None else str(v) for v in row])
                     row_count += 1
-    finally:
-        if conn_type != "duckdb":
+    else:
+        cur = conn.cursor()
+        try:
+            if conn_type == "oracle":
+                cur.arraysize = 10000
+            cur.execute(sql_text)
+            columns = [d[0] for d in cur.description]
+            with open_fn(out_file, "wt", encoding="utf-8", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(columns)
+                while True:
+                    batch = cur.fetchmany(10000)
+                    if not batch:
+                        break
+                    for row in batch:
+                        writer.writerow(["" if v is None else str(v) for v in row])
+                        row_count += 1
+        finally:
             cur.close()
 
     return row_count
@@ -291,13 +283,16 @@ def _run_excel_export(ctx, report_cfg, cfg, csv_files: list):
                 sheet_name = csv_file.stem.replace(".csv", "").upper()[:31]
 
                 open_fn = gzip.open if str(csv_file).endswith(".gz") else open
-                with open_fn(csv_file, "rt", encoding="utf-8") as f:
-                    df = pd.read_csv(f)
 
-                row_count = len(df)
+                # 행 수 사전 체크 (OOM 방지)
+                with open_fn(csv_file, "rt", encoding="utf-8") as f:
+                    row_count = sum(1 for _ in f) - 1  # 헤더 제외
                 if row_count > 1_048_576:
                     logger.warning("REPORT excel: row limit exceeded, skip | %s rows=%d", sheet_name, row_count)
                     continue
+
+                with open_fn(csv_file, "rt", encoding="utf-8") as f:
+                    df = pd.read_csv(f)
 
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
                 summary_rows.append({"sheet_name": sheet_name, "rows": row_count})

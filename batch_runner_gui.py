@@ -645,9 +645,7 @@ class BatchRunnerGUI(tk.Tk):
 
         self._jobs: dict = {}
         self._env_hosts: dict = {}
-        self._presets: dict = {}
         self._theme_var = tk.StringVar(value="Mocha")
-        self._preset_var = tk.StringVar()
 
         # Job / Run Mode
         self.job_var = tk.StringVar()
@@ -682,6 +680,7 @@ class BatchRunnerGUI(tk.Tk):
         self._ov_overwrite    = tk.BooleanVar(value=False)
         self._ov_workers      = tk.IntVar(value=1)
         self._ov_compression  = tk.StringVar(value="gzip")
+        self._ov_load_mode    = tk.StringVar(value="replace")
         self._ov_on_error     = tk.StringVar(value="stop")
         self._ov_excel        = tk.BooleanVar(value=True)
         self._ov_csv          = tk.BooleanVar(value=True)
@@ -701,7 +700,6 @@ class BatchRunnerGUI(tk.Tk):
         self._build_style()
         self._build_ui()
         self._reload_project()
-        self._load_presets()
         self._bind_shortcuts()
         self._load_geometry()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -711,7 +709,7 @@ class BatchRunnerGUI(tk.Tk):
         self.bind_all("<F5>",         lambda e: self._run_btn.invoke() if self._run_btn["state"] != "disabled" else None)
         self.bind_all("<Control-F5>", lambda e: self._dryrun_btn.invoke() if self._dryrun_btn["state"] != "disabled" else None)
         self.bind_all("<Escape>",     lambda e: self._on_stop() if self._stop_btn["state"] != "disabled" else None)
-        self.bind_all("<Control-s>",  lambda e: self._on_preset_save())
+        self.bind_all("<Control-s>",  lambda e: self._on_save_yml())
         self.bind_all("<Control-r>",  lambda e: self._reload_project())
         self.bind_all("<Control-l>",  lambda e: self._export_log())
         self.bind_all("<Control-f>",  lambda e: self._toggle_search())
@@ -746,6 +744,10 @@ class BatchRunnerGUI(tk.Tk):
             pass
 
     def _on_close(self):
+        if self._process and self._process.poll() is None:
+            if not messagebox.askyesno("종료", "실행 중인 작업이 있습니다. 종료하시겠습니까?"):
+                return
+            self._on_stop()
         self._save_geometry()
         self.destroy()
 
@@ -786,7 +788,6 @@ class BatchRunnerGUI(tk.Tk):
         # 상태 복원
         self._work_dir.set(wd)
         self._reload_project()
-        self._load_presets()
         # 테마 드롭다운을 새 theme_var에 연결
         self._theme_var.set(theme_name)
         self._restore_snapshot(snap)
@@ -961,7 +962,7 @@ class BatchRunnerGUI(tk.Tk):
 
         # 변경 감지 → preview 갱신
         for ov_var in (self._ov_compression, self._ov_on_error,
-                       self._ov_union_dir, self._ov_timeout,
+                       self._ov_load_mode, self._ov_union_dir, self._ov_timeout,
                        self._export_sql_dir, self._export_out_dir,
                        self._target_db_path, self._target_schema,
                        self._transform_sql_dir, self._report_sql_dir,
@@ -1114,6 +1115,23 @@ class BatchRunnerGUI(tk.Tk):
         self._oracle_hint_row = tk.Frame(body, bg=C["mantle"])
         tk.Label(self._oracle_hint_row, text="⚠  Target Oracle → source.host=local 로 연결됩니다",
                  font=FONTS["small"], bg=C["mantle"], fg=C["yellow"]).pack(anchor="w", padx=14, pady=(2, 4))
+
+        # Load Mode
+        self._load_mode_row = tk.Frame(body, bg=C["mantle"])
+        tk.Label(self._load_mode_row, text="Load Mode", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        self._load_mode_combo = ttk.Combobox(
+            self._load_mode_row, textvariable=self._ov_load_mode,
+            values=["replace", "truncate", "append"],
+            state="readonly", font=FONTS["mono"], width=14)
+        self._load_mode_combo.pack(side="left", fill="x", expand=True)
+
+        self._load_note_oracle = tk.Label(body,
+            text="oracle: delete (param WHERE) / append",
+            font=FONTS["small"], bg=C["mantle"], fg=C["overlay0"])
+        self._load_note_other = tk.Label(body,
+            text="duckdb/sqlite: replace (DROP+CREATE) / truncate / append",
+            font=FONTS["small"], bg=C["mantle"], fg=C["overlay0"])
 
         self._update_target_visibility()
 
@@ -1291,44 +1309,29 @@ class BatchRunnerGUI(tk.Tk):
         sec.pack(fill="x")
         body = sec.body
 
-        # Job 선택
-        tk.Label(body, text="Load Job (--job)", font=FONTS["body_bold"],
-                 bg=C["mantle"], fg=C["peach"]).pack(anchor="w", padx=12, pady=(8, 2))
+        # Row 1: combo + del
         job_row = tk.Frame(body, bg=C["mantle"])
-        job_row.pack(fill="x", padx=12, pady=(0, 4))
+        job_row.pack(fill="x", padx=12, pady=(8, 2))
         self._job_combo = ttk.Combobox(job_row, textvariable=self.job_var,
                                        state="readonly", font=FONTS["mono"], width=18)
         self._job_combo.pack(side="left", fill="x", expand=True)
         self._job_combo.bind("<<ComboboxSelected>>", self._on_job_change)
-
-        # Presets
-        tk.Label(body, text="Presets", font=FONTS["body_bold"],
-                 bg=C["mantle"], fg=C["peach"]).pack(anchor="w", padx=12, pady=(4, 2))
-        preset_row = tk.Frame(body, bg=C["mantle"])
-        preset_row.pack(fill="x", padx=12, pady=(0, 2))
-        self._preset_combo = ttk.Combobox(preset_row, textvariable=self._preset_var,
-                                          state="readonly", font=FONTS["mono_small"], width=16)
-        self._preset_combo.pack(side="left", fill="x", expand=True)
-        self._preset_combo.bind("<<ComboboxSelected>>", self._on_preset_load)
-        tk.Button(preset_row, text="load", font=FONTS["mono_small"],
-                  bg=C["blue"], fg=C["crust"], relief="flat", padx=6,
-                  activebackground=C["sky"],
-                  command=self._on_preset_load).pack(side="left", padx=(4, 2))
-        tk.Button(preset_row, text="del", font=FONTS["mono_small"],
+        tk.Button(job_row, text="del", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["red"], relief="flat", padx=6,
                   activebackground=C["surface1"],
-                  command=self._on_preset_delete).pack(side="left")
+                  command=self._on_job_delete).pack(side="left", padx=(4, 0))
 
+        # Row 2: save + save as
         btn_row = tk.Frame(body, bg=C["mantle"])
         btn_row.pack(fill="x", padx=12, pady=(2, 6))
-        tk.Button(btn_row, text="+ save as preset", font=FONTS["mono_small"],
+        tk.Button(btn_row, text="save", font=FONTS["mono_small"],
+                  bg=C["green"], fg=C["crust"], relief="flat", padx=6, pady=2,
+                  activebackground=C["teal"],
+                  command=self._on_save_yml).pack(side="left", padx=(0, 6))
+        tk.Button(btn_row, text="save as", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6, pady=2,
                   activebackground=C["surface1"],
-                  command=self._on_preset_save).pack(side="left", padx=(0, 6))
-        tk.Button(btn_row, text="save as yml", font=FONTS["mono_small"],
-                  bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6, pady=2,
-                  activebackground=C["surface1"],
-                  command=self._on_save_yml).pack(side="left")
+                  command=self._on_save_yml_as).pack(side="left")
 
     # ── 우측 로그 패널 ───────────────────────────────────────
     def _build_right(self, parent):
@@ -1422,12 +1425,13 @@ class BatchRunnerGUI(tk.Tk):
                         ("SYS",   C["blue"]),   ("TIME",  C["overlay0"]),
                         ("DIM",   C["subtext"])]:
             self._log.tag_config(tag, foreground=fg)
-        # Phase 4: 추가 태그
-        self._log.tag_config("STAGE_HEADER", foreground=C["blue"],
+        self._log.tag_config("STAGE_HEADER", foreground=C["mauve"],
+                             font=(FONT_MONO, 11, "bold"),
+                             background=C["surface0"],
+                             spacing1=12, spacing3=4)
+        self._log.tag_config("STAGE_DONE", foreground=C["teal"],
                              font=(FONT_MONO, 10, "bold"),
-                             background=C["surface0"], spacing1=6, spacing3=4)
-        self._log.tag_config("STAGE_DONE", foreground=C["green"],
-                             font=(FONT_MONO, 10, "bold"))
+                             spacing3=8)
         self._log.tag_config("HIGHLIGHT", background=C["yellow"], foreground=C["crust"])
 
     # ── 하단 버튼 바 ─────────────────────────────────────────
@@ -1482,9 +1486,10 @@ class BatchRunnerGUI(tk.Tk):
             tk.Label(bar, text=f"{hint[0]} {hint[1]}", font=FONTS["shortcut"],
                      bg=C["crust"], fg=C["overlay0"]).pack(side="left", padx=6)
 
-        tk.Label(bar, text=f"Python {sys.version.split()[0]}",
-                 bg=C["crust"], fg=C["overlay0"], font=FONTS["mono_small"]
-                 ).pack(side="right", padx=10)
+        self._clock_label = tk.Label(bar, text="", bg=C["crust"],
+                                     fg=C["overlay0"], font=FONTS["mono_small"])
+        self._clock_label.pack(side="right", padx=10)
+        self._tick_clock()
 
     # ── 현재 설정 스냅샷 ────────────────────────────────────────
     def _snapshot(self) -> dict:
@@ -1512,6 +1517,7 @@ class BatchRunnerGUI(tk.Tk):
                 "overwrite":    self._ov_overwrite.get(),
                 "workers":      self._ov_workers.get(),
                 "compression":  self._ov_compression.get(),
+                "load_mode":    self._ov_load_mode.get(),
                 "on_error":     self._ov_on_error.get(),
                 "excel":        self._ov_excel.get(),
                 "csv":          self._ov_csv.get(),
@@ -1534,6 +1540,7 @@ class BatchRunnerGUI(tk.Tk):
         self._target_schema.set(snap.get("target_schema", ""))
         if hasattr(self, "_db_path_row"):
             self._update_target_visibility()
+        self._update_load_mode_options()
 
         self._export_sql_dir.set(snap.get("export_sql_dir", "sql/export"))
         self._export_out_dir.set(snap.get("export_out_dir", "data/export"))
@@ -1561,6 +1568,7 @@ class BatchRunnerGUI(tk.Tk):
         self._ov_overwrite.set(ov.get("overwrite", False))
         self._ov_workers.set(ov.get("workers", 1))
         self._ov_compression.set(ov.get("compression", "gzip"))
+        self._ov_load_mode.set(ov.get("load_mode", "replace"))
         self._ov_on_error.set(ov.get("on_error", "stop"))
         self._ov_excel.set(ov.get("excel", True))
         self._ov_csv.set(ov.get("csv", True))
@@ -1572,23 +1580,8 @@ class BatchRunnerGUI(tk.Tk):
         self._refresh_preview()
 
     # ── Presets (jobs/*.yml 기반) ────────────────────────────────
-    def _presets_dir(self) -> Path:
+    def _jobs_dir(self) -> Path:
         return Path(self._work_dir.get()) / "jobs"
-
-    def _load_presets(self):
-        """jobs/ 폴더의 모든 .yml 파일을 preset 목록으로 로드"""
-        jobs_dir = self._presets_dir()
-        self._presets = {}  # {stem: Path}
-        if jobs_dir.exists():
-            for p in sorted(jobs_dir.glob("*.yml")):
-                self._presets[p.stem] = p
-        self._refresh_preset_combo()
-
-    def _refresh_preset_combo(self):
-        names = list(self._presets.keys())
-        self._preset_combo["values"] = names
-        if self._preset_var.get() not in names:
-            self._preset_var.set(names[0] if names else "")
 
     def _build_gui_config(self) -> dict:
         """GUI 전체 상태를 job yml dict로 조립"""
@@ -1611,6 +1604,9 @@ class BatchRunnerGUI(tk.Tk):
                 "parallel_workers": self._ov_workers.get(),
                 "compression": self._ov_compression.get(),
                 "format": "csv",
+            },
+            "load": {
+                "mode": self._ov_load_mode.get(),
             },
             "target": {
                 "type": self._target_type_var.get(),
@@ -1672,7 +1668,7 @@ class BatchRunnerGUI(tk.Tk):
                 return
             if not raw.endswith(".yml"):
                 raw += ".yml"
-            jobs_dir = self._presets_dir()
+            jobs_dir = self._jobs_dir()
             jobs_dir.mkdir(parents=True, exist_ok=True)
             out_path = jobs_dir / raw
             if out_path.exists():
@@ -1697,44 +1693,48 @@ class BatchRunnerGUI(tk.Tk):
                   activebackground=C["teal"],
                   command=do_save).pack(pady=10)
 
-    def _on_preset_save(self):
+    def _on_save_yml(self):
+        """현재 선택된 job 파일을 덮어쓰기. 선택된 job 없으면 save as fallback."""
         fname = self.job_var.get()
-        suggest = fname.replace(".yml", "") + "_preset" if fname else "new_job"
-        self._save_yml_dialog(suggest, "Save as yml (Preset)")
-
-    def _on_preset_load(self, *_):
-        name = self._preset_var.get()
-        if not name or name not in self._presets:
+        if not fname:
+            self._on_save_yml_as()
             return
-        yml_name = self._presets[name].name
-        self.job_var.set(yml_name)
-        self._on_job_change()
-        self._log_sys(f"Loaded: {yml_name}")
+        jobs_dir = self._jobs_dir()
+        out_path = jobs_dir / fname
+        new_cfg = self._build_gui_config()
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            yaml.dump(new_cfg, allow_unicode=True, default_flow_style=False,
+                      sort_keys=False),
+            encoding="utf-8"
+        )
+        self._log_sys(f"Saved: {out_path.name}")
 
-    def _on_preset_delete(self):
-        name = self._preset_var.get()
-        if not name or name not in self._presets:
+    def _on_save_yml_as(self):
+        """새 이름으로 저장 (다이얼로그)"""
+        fname = self.job_var.get()
+        suggest = fname.replace(".yml", "") if fname else "new_job"
+        self._save_yml_dialog(suggest, "Save as yml")
+
+    def _on_job_delete(self):
+        """현재 선택된 job 파일 삭제"""
+        fname = self.job_var.get()
+        if not fname:
             return
-        yml_path = self._presets[name]
-        if not messagebox.askyesno("Delete", f"Delete '{yml_path.name}'?\nThis will permanently delete the file."):
+        jobs_dir = self._jobs_dir()
+        yml_path = jobs_dir / fname
+        if not yml_path.exists():
+            return
+        if not messagebox.askyesno("Delete", f"Delete '{fname}'?\nThis will permanently delete the file."):
             return
         try:
             yml_path.unlink()
-            self._log_sys(f"Deleted: {yml_path.name}")
+            self._log_sys(f"Deleted: {fname}")
         except Exception as e:
             messagebox.showerror("Error", str(e))
             return
-        self._load_presets()
+        self.job_var.set("")
         self._reload_project()
-
-    # ── yml로 저장 ───────────────────────────────────────────────
-    def _on_save_yml(self):
-        fname = self.job_var.get()
-        if fname:
-            suggest = fname.replace(".yml", "") + "_custom"
-        else:
-            suggest = "new_job"
-        self._save_yml_dialog(suggest, "Save as yml")
 
     # ── 프로젝트 로드 ────────────────────────────────────────
     def _reload_project(self):
@@ -1867,9 +1867,10 @@ class BatchRunnerGUI(tk.Tk):
                 merged[p] = str(yml_params[p])
             else:
                 merged[p] = ""
-        # 사용자가 직접 추가한 값은 항상 유지
+        # 사용자가 직접 추가한 값만 유지 (자동감지였던 것은 제거)
+        prev_detected = getattr(self, "_last_detected_params", set())
         for k, v in current.items():
-            if k not in merged:
+            if k not in merged and k not in prev_detected:
                 merged[k] = v
 
         self._refresh_param_rows(list(merged.items()))
@@ -1894,24 +1895,45 @@ class BatchRunnerGUI(tk.Tk):
         tgt = self._target_type_var.get()
         self._transform_sql_dir.set(f"sql/transform/{tgt}")
         self._update_target_visibility()
+        self._update_load_mode_options()
         self._refresh_preview()
+
+    def _update_load_mode_options(self):
+        """target type에 따라 load.mode 선택지 자동 전환"""
+        if not hasattr(self, "_load_mode_combo"):
+            return
+        tgt = self._target_type_var.get()
+        if tgt == "oracle":
+            self._load_mode_combo["values"] = ["delete", "append"]
+            if self._ov_load_mode.get() not in ("delete", "append"):
+                self._ov_load_mode.set("delete")
+        else:
+            self._load_mode_combo["values"] = ["replace", "truncate", "append"]
+            if self._ov_load_mode.get() not in ("replace", "truncate", "append"):
+                self._ov_load_mode.set("replace")
 
     def _update_target_visibility(self):
         tgt = self._target_type_var.get()
         if not hasattr(self, "_db_path_row"):
             return
+        # forget all dynamic rows to ensure correct pack order
+        self._db_path_row.pack_forget()
+        self._schema_row.pack_forget()
+        self._oracle_hint_row.pack_forget()
+        self._load_mode_row.pack_forget()
+        self._load_note_oracle.pack_forget()
+        self._load_note_other.pack_forget()
+
         if tgt in ("duckdb", "sqlite3"):
             self._db_path_row.pack(fill="x", padx=12, pady=2)
-            self._schema_row.pack_forget()
-            self._oracle_hint_row.pack_forget()
         elif tgt == "oracle":
-            self._db_path_row.pack_forget()
             self._schema_row.pack(fill="x", padx=12, pady=2)
             self._oracle_hint_row.pack(fill="x", padx=12)
-        else:
-            self._db_path_row.pack_forget()
-            self._schema_row.pack_forget()
-            self._oracle_hint_row.pack_forget()
+
+        # load mode always visible after target-specific rows
+        self._load_mode_row.pack(fill="x", padx=12, pady=2)
+        self._load_note_oracle.pack(anchor="w", padx=26, pady=(4, 0))
+        self._load_note_other.pack(anchor="w", padx=26, pady=0)
 
     # ── Export sql_dir 변경 → auto-suggest ────────────────────
     def _on_export_sql_dir_change(self):
@@ -2030,21 +2052,9 @@ class BatchRunnerGUI(tk.Tk):
         self._sql_preview.config(state="disabled")
 
     # ── Command 빌드 & 미리보기 ──────────────────────────────
-    def _build_command(self) -> list[str]:
-        """GUI 상태 전체를 임시 yml로 생성 후 runner.py에 전달"""
-        cmd = ["python", "runner.py"]
-
-        # 임시 yml 생성
-        cfg = self._build_gui_config()
-        wd = Path(self._work_dir.get())
-        jobs_dir = wd / "jobs"
-        jobs_dir.mkdir(parents=True, exist_ok=True)
-        temp_path = jobs_dir / "_gui_temp.yml"
-        temp_path.write_text(
-            yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
-            encoding="utf-8"
-        )
-        cmd += ["--job", "_gui_temp.yml"]
+    def _build_command_args(self) -> list[str]:
+        """yml 쓰기 없이 CLI 인자만 조립 (preview용)"""
+        cmd = ["python", "runner.py", "--job", "_gui_temp.yml"]
 
         # env
         env_path = self._env_path_var.get().strip()
@@ -2086,9 +2096,22 @@ class BatchRunnerGUI(tk.Tk):
 
         return [str(x) for x in cmd]
 
+    def _build_command(self) -> list[str]:
+        """실행용: yml 쓰기 + CLI 인자"""
+        cfg = self._build_gui_config()
+        wd = Path(self._work_dir.get())
+        jobs_dir = wd / "jobs"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = jobs_dir / "_gui_temp.yml"
+        temp_path.write_text(
+            yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8"
+        )
+        return self._build_command_args()
+
     def _refresh_preview(self):
         try:
-            cmd = self._build_command()
+            cmd = self._build_command_args()
             text = " ".join(cmd)
         except Exception as e:
             text = f"(오류: {e})"
@@ -2393,20 +2416,35 @@ class BatchRunnerGUI(tk.Tk):
         self.after(0, self._on_done, ret)
 
     def _guess_tag(self, line: str) -> str:
+        import re
         low = line.lower()
-        # STAGE 시작/끝 패턴 우선 감지
+        # STAGE 시작/끝 패턴 (최우선)
         if any(k in low for k in ("=== stage", "--- stage", "stage start", "[stage")):
             return "STAGE_HEADER"
         if any(k in low for k in ("stage done", "stage complete", "stage finish")):
             return "STAGE_DONE"
-        if any(k in low for k in ("error", "exception", "traceback", "failed")):
+        # 구분선 / 배너
+        if any(k in low for k in ("===", "---", "pipeline", "job start", "job finish")):
+            return "SYS"
+        # summary 줄: failed=N 값으로 판단 (failed=0이면 SUCCESS)
+        if "summary" in low:
+            m = re.search(r"failed=(\d+)", low)
+            if m and int(m.group(1)) > 0:
+                return "ERROR"
+            return "SUCCESS"
+        # 에러 (명확한 에러 패턴)
+        if any(k in low for k in ("exception", "traceback")):
             return "ERROR"
+        if re.search(r"\bfailed\b", low) and "failed=" not in low:
+            return "ERROR"
+        if re.search(r"\berror\b", low):
+            return "ERROR"
+        # 경고
         if any(k in low for k in ("warn", "warning")):
             return "WARN"
-        if any(k in low for k in ("done", "success", "finish", "completed")):
+        # 성공
+        if any(k in low for k in ("done", "success", "completed")):
             return "SUCCESS"
-        if any(k in low for k in ("===", "---", "pipeline", "stage", "job start", "job finish")):
-            return "SYS"
         return "INFO"
 
     def _update_progress(self, pct: int, label: str):
@@ -2419,6 +2457,14 @@ class BatchRunnerGUI(tk.Tk):
         self._progress_label.config(text=f"{label}{elapsed}")
         if hasattr(self, '_stage_status'):
             self._stage_status.config(text=label)
+
+    def _tick_clock(self):
+        import datetime, locale
+        days_kr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        now = datetime.datetime.now()
+        day = days_kr[now.weekday()]
+        self._clock_label.config(text=now.strftime(f"%Y-%m-%d ({day}) %H:%M"))
+        self.after(30000, self._tick_clock)
 
     def _tick_elapsed(self):
         import time
