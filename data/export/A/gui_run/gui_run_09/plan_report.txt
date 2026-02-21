@@ -1,0 +1,30 @@
+======================================================================
+  DRYRUN REPORT
+  Job     : gui_run
+  Run ID  : gui_run_09
+  At      : 2026-02-21 14:11:48
+  Source  : oracle / local
+  Params  : {}
+======================================================================
+
+total tasks    : 2
+tasks with warnings : 2
+
+[001] ⚠ WARNING
+  SQL file  : a1.sql
+  Params   : {}
+  output file : C:\Users\thrus\Downloads\ELT_Runner_v1.91\elt_runner_v1.91\data\export\A\gui_run\a1__local.csv.gz
+  ⚠  suspected unresolved parameter: [':clsYymm']
+  SQL preview:
+    select * from CONTRACT_INFO
+    where TO_CHAR(CONTRACT_DATE, 'YYYYMM') = :clsYymm
+
+[002] ⚠ WARNING
+  SQL file  : a2.sql
+  Params   : {}
+  output file : C:\Users\thrus\Downloads\ELT_Runner_v1.91\elt_runner_v1.91\data\export\A\gui_run\a2__local.csv.gz
+  ⚠  suspected unresolved parameter: [':clsYymm']
+  SQL preview:
+    select * from DEPOSIT_INFO
+    where TO_CHAR(DEPOSIT_DATE, 'YYYYMM') = :clsYymm
+

@@ -23,7 +23,7 @@ source:
 
 # ── Export ───────────────────────────────────────────────────
 export:
-  sql_dir: sql/export
+  # sql_dir: sql/export
   out_dir: data/export
   format: csv
   compression: gzip

@@ -152,7 +152,7 @@ def _open_connection(ctx, report_source: str):
         try:
             return connect_target(ctx, target_cfg)
         except Exception as e:
-            logger.exception("REPORT target 연결 실패: %s", e)
+            logger.exception("REPORT failed to connect to target: %s", e)
             return None, None, None
 
     # source DB (oracle / vertica)
@@ -184,11 +184,11 @@ def _open_connection(ctx, report_source: str):
             return get_vertica_conn(host_cfg), "vertica", label
 
         else:
-            logger.error("REPORT: 지원하지 않는 source type: %s", src_type)
+            logger.error("REPORT: unsupported source type: %s", src_type)
             return None, None, None
 
     except Exception as e:
-        logger.exception("REPORT source 연결 실패: %s", e)
+        logger.exception("REPORT failed to connect to source: %s", e)
         return None, None, None
 
 
@@ -251,7 +251,7 @@ def _get_excel_output_path(ctx, out_dir: Path, job_name: str, max_files: int) ->
     while len(existing_sorted) >= max_files:
         _, old = existing_sorted.pop(0)
         old.unlink()
-        logger.info("REPORT excel: 오래된 파일 삭제 %s", old.name)
+        logger.info("REPORT excel: deleting old file %s", old.name)
 
     return out
 
@@ -270,7 +270,7 @@ def _run_excel_export(ctx, report_cfg, cfg, csv_files: list):
             )
 
     if not csv_files:
-        logger.warning("REPORT excel: 대상 CSV 없음, skip")
+        logger.warning("REPORT excel: no target CSV found, skip")
         return
 
     output_path = _get_excel_output_path(ctx, out_dir, ctx.job_name, max_files)
@@ -296,7 +296,7 @@ def _run_excel_export(ctx, report_cfg, cfg, csv_files: list):
 
                 row_count = len(df)
                 if row_count > 1_048_576:
-                    logger.warning("REPORT excel: 행 수 초과 skip | %s rows=%d", sheet_name, row_count)
+                    logger.warning("REPORT excel: row limit exceeded, skip | %s rows=%d", sheet_name, row_count)
                     continue
 
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -366,6 +366,6 @@ def _run_excel_export(ctx, report_cfg, cfg, csv_files: list):
         logger.info("REPORT excel done | %s (%.2fs)", output_path.name, time.time() - start)
 
     except ImportError as e:
-        logger.error("REPORT excel: 패키지 미설치 (%s) → pip install pandas openpyxl", e)
+        logger.error("REPORT excel: package not installed (%s) -> pip install pandas openpyxl", e)
     except Exception as e:
-        logger.exception("REPORT excel 생성 실패: %s", e)
+        logger.exception("REPORT excel generation failed: %s", e)

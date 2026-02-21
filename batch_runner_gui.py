@@ -10,15 +10,16 @@ import threading
 import sys
 import os
 import signal
+import json
 import yaml
 from pathlib import Path
 from datetime import datetime
 
 # ─────────────────────────────────────────────────────────────
-# 색상 팔레트 5종
+# 색상 팔레트 11종
 # ─────────────────────────────────────────────────────────────
 THEMES = {
-    "Mocha": {           # Dark 1 — Catppuccin Mocha
+    "Mocha": {           # Dark — Catppuccin Mocha
         "base":    "#1e1e2e", "mantle":  "#181825", "crust":   "#11111b",
         "surface0":"#313244", "surface1":"#45475a", "surface2":"#585b70",
         "overlay0":"#6c7086", "overlay1":"#7f849c",
@@ -27,7 +28,7 @@ THEMES = {
         "red":     "#f38ba8", "peach":   "#fab387", "mauve":   "#cba6f7",
         "teal":    "#94e2d5", "sky":     "#89dceb",
     },
-    "Nord": {            # Dark 2 — Nord
+    "Nord": {            # Dark — Nord
         "base":    "#2e3440", "mantle":  "#272c36", "crust":   "#1e2430",
         "surface0":"#3b4252", "surface1":"#434c5e", "surface2":"#4c566a",
         "overlay0":"#616e88", "overlay1":"#7b88a1",
@@ -36,7 +37,34 @@ THEMES = {
         "red":     "#bf616a", "peach":   "#d08770", "mauve":   "#b48ead",
         "teal":    "#88c0d0", "sky":     "#8fbcbb",
     },
-    "Latte": {           # Light 1 — Catppuccin Latte
+    "Dracula": {         # Dark — Dracula
+        "base":    "#282a36", "mantle":  "#21222c", "crust":   "#191a21",
+        "surface0":"#343746", "surface1":"#424450", "surface2":"#515360",
+        "overlay0":"#6272a4", "overlay1":"#7384b0",
+        "text":    "#f8f8f2", "subtext": "#bfbfb2",
+        "blue":    "#8be9fd", "green":   "#50fa7b", "yellow":  "#f1fa8c",
+        "red":     "#ff5555", "peach":   "#ffb86c", "mauve":   "#bd93f9",
+        "teal":    "#8be9fd", "sky":     "#69c3ff",
+    },
+    "Tokyo Night": {     # Dark — Tokyo Night
+        "base":    "#1a1b26", "mantle":  "#16161e", "crust":   "#101014",
+        "surface0":"#232433", "surface1":"#2f3043", "surface2":"#3b3d57",
+        "overlay0":"#565f89", "overlay1":"#6b7394",
+        "text":    "#c0caf5", "subtext": "#9aa5ce",
+        "blue":    "#7aa2f7", "green":   "#9ece6a", "yellow":  "#e0af68",
+        "red":     "#f7768e", "peach":   "#ff9e64", "mauve":   "#bb9af7",
+        "teal":    "#73daca", "sky":     "#7dcfff",
+    },
+    "One Dark": {        # Dark — Atom One Dark
+        "base":    "#282c34", "mantle":  "#21252b", "crust":   "#181a1f",
+        "surface0":"#2c313a", "surface1":"#383e4a", "surface2":"#454b56",
+        "overlay0":"#5c6370", "overlay1":"#737984",
+        "text":    "#abb2bf", "subtext": "#8b929e",
+        "blue":    "#61afef", "green":   "#98c379", "yellow":  "#e5c07b",
+        "red":     "#e06c75", "peach":   "#d19a66", "mauve":   "#c678dd",
+        "teal":    "#56b6c2", "sky":     "#67cddb",
+    },
+    "Latte": {           # Light — Catppuccin Latte
         "base":    "#eff1f5", "mantle":  "#e6e9ef", "crust":   "#dce0e8",
         "surface0":"#ccd0da", "surface1":"#bcc0cc", "surface2":"#acb0be",
         "overlay0":"#9ca0b0", "overlay1":"#8c8fa1",
@@ -45,7 +73,7 @@ THEMES = {
         "red":     "#d20f39", "peach":   "#fe640b", "mauve":   "#8839ef",
         "teal":    "#179299", "sky":     "#04a5e5",
     },
-    "White": {           # Light 2 — Clean White
+    "White": {           # Light — Clean White
         "base":    "#ffffff", "mantle":  "#f5f5f5", "crust":   "#ebebeb",
         "surface0":"#e0e0e0", "surface1":"#cccccc", "surface2":"#b8b8b8",
         "overlay0":"#999999", "overlay1":"#808080",
@@ -54,7 +82,7 @@ THEMES = {
         "red":     "#cc0000", "peach":   "#e06000", "mauve":   "#7700cc",
         "teal":    "#007a7a", "sky":     "#0099bb",
     },
-    "Paper": {           # Light 3 — Warm Paper
+    "Paper": {           # Light — Warm Paper
         "base":    "#f8f4e8", "mantle":  "#f0ead6", "crust":   "#e8e0c8",
         "surface0":"#ddd5bb", "surface1":"#cec5a8", "surface2":"#b8ad92",
         "overlay0":"#9a9070", "overlay1":"#807558",
@@ -63,11 +91,94 @@ THEMES = {
         "red":     "#a02020", "peach":   "#a04818", "mauve":   "#6b3fa0",
         "teal":    "#2a7a6a", "sky":     "#2068a0",
     },
+    "Solarized Light": { # Light — Solarized Light
+        "base":    "#fdf6e3", "mantle":  "#eee8d5", "crust":   "#e4ddc8",
+        "surface0":"#d5cdb6", "surface1":"#c5bda6", "surface2":"#b0a890",
+        "overlay0":"#93a1a1", "overlay1":"#839496",
+        "text":    "#657b83", "subtext": "#586e75",
+        "blue":    "#268bd2", "green":   "#859900", "yellow":  "#b58900",
+        "red":     "#dc322f", "peach":   "#cb4b16", "mauve":   "#6c71c4",
+        "teal":    "#2aa198", "sky":     "#2aa6c4",
+    },
+    "Gruvbox Light": {   # Light — Gruvbox Light
+        "base":    "#fbf1c7", "mantle":  "#f2e5bc", "crust":   "#e8d8a8",
+        "surface0":"#d5c4a1", "surface1":"#c9b995", "surface2":"#bdae93",
+        "overlay0":"#a89984", "overlay1":"#928374",
+        "text":    "#3c3836", "subtext": "#504945",
+        "blue":    "#458588", "green":   "#79740e", "yellow":  "#b57614",
+        "red":     "#cc241d", "peach":   "#d65d0e", "mauve":   "#8f3f71",
+        "teal":    "#427b58", "sky":     "#4596a8",
+    },
+    "Rose Pine Dawn": {  # Light — Rose Pine Dawn
+        "base":    "#faf4ed", "mantle":  "#f2e9e1", "crust":   "#e4d7c8",
+        "surface0":"#dfdad0", "surface1":"#d0c8be", "surface2":"#c2b9af",
+        "overlay0":"#9893a5", "overlay1":"#807d8e",
+        "text":    "#575279", "subtext": "#6e6a86",
+        "blue":    "#286983", "green":   "#56949f", "yellow":  "#ea9d34",
+        "red":     "#b4637a", "peach":   "#d7827e", "mauve":   "#907aa9",
+        "teal":    "#56949f", "sky":     "#569fb5",
+    },
 }
 
 # 현재 테마 (전역 — 위젯 생성 시 참조)
 _CURRENT_THEME = "Mocha"
 C = dict(THEMES[_CURRENT_THEME])
+
+# ─────────────────────────────────────────────────────────────
+# 폰트 시스템
+# ─────────────────────────────────────────────────────────────
+# FONT_FAMILY = "IBM Plex Sans KR"
+FONT_FAMILY = "Malgun Gothic"
+FONT_MONO   = "Consolas"
+
+def _load_bundled_fonts():
+    """fonts/ 폴더의 ttf/otf를 프로세스 전용으로 등록 (시스템 설치 불필요)"""
+    if sys.platform != "win32":
+        return
+    fonts_dir = Path(__file__).parent / "fonts"
+    if not fonts_dir.is_dir():
+        return
+    import ctypes
+    FR_PRIVATE = 0x10
+    gdi32 = ctypes.windll.gdi32
+    for f in fonts_dir.iterdir():
+        if f.suffix.lower() in (".ttf", ".otf"):
+            gdi32.AddFontResourceExW(str(f.resolve()), FR_PRIVATE, 0)
+
+def _resolve_font():
+    """번들 폰트 로드 후, 없으면 Malgun Gothic fallback"""
+    global FONT_FAMILY
+    _load_bundled_fonts()
+    try:
+        import tkinter as _tk
+        _r = _tk.Tk()
+        _r.withdraw()
+        available = _r.tk.call("font", "families")
+        _r.destroy()
+        if FONT_FAMILY not in available:
+            FONT_FAMILY = "Malgun Gothic"
+    except Exception:
+        FONT_FAMILY = "Malgun Gothic"
+_resolve_font()
+FONTS = {
+    "h1":         (FONT_FAMILY, 14, "bold"),   # 최상위 헤더
+    "h2":         (FONT_FAMILY, 11, "bold"),   # 섹션 헤더
+    "body":       (FONT_FAMILY, 10),           # 기본 텍스트
+    "body_bold":  (FONT_FAMILY, 10, "bold"),
+    "small":      (FONT_FAMILY, 9),            # 보조 힌트
+    "mono":       (FONT_MONO,   10),           # 입력 필드
+    "mono_small": (FONT_MONO,   9),            # Override 라벨
+    "log":        (FONT_MONO,   10),           # 로그 본문
+    "cmd":        (FONT_MONO,   10),           # 커맨드 프리뷰
+    "button":     (FONT_FAMILY, 11, "bold"),   # Run/Stop
+    "button_sm":  (FONT_FAMILY, 10),           # 보조 버튼
+    "shortcut":   (FONT_MONO,   8),            # 단축키 힌트
+}
+
+# ─────────────────────────────────────────────────────────────
+# 설정 파일 경로 (geometry, theme 저장)
+# ─────────────────────────────────────────────────────────────
+_CONF_PATH = Path.home() / ".elt_runner_gui.conf"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -236,12 +347,12 @@ def collect_sql_tree(sql_dir: Path) -> dict:
 
     if not sql_dir.exists():
         return {}
-    tree = {}
+    tree = {"__files__": []}
     for item in sorted(sql_dir.iterdir()):
         if item.is_dir():
             tree[item.name] = _walk(item)
         elif item.is_file() and item.suffix.lower() == ".sql":
-            tree.setdefault("__root__", {"__files__": []})["__files__"].append(item.name)
+            tree["__files__"].append(item.name)
     return tree
 
 
@@ -278,19 +389,19 @@ class SqlSelectorDialog(tk.Toplevel):
         # 헤더
         hdr = tk.Frame(self, bg=C["mantle"], pady=8)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="📂  SQL File Select", font=("Consolas", 11, "bold"),
+        tk.Label(hdr, text="📂  SQL File Select", font=FONTS["h2"],
                  bg=C["mantle"], fg=C["text"]).pack(side="left", padx=14)
-        tk.Label(hdr, text=str(self.sql_dir), font=("Consolas", 8),
+        tk.Label(hdr, text=str(self.sql_dir), font=FONTS["shortcut"],
                  bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=6)
 
         # 전체선택 / 전체해제
         ctrl = tk.Frame(self, bg=C["base"], pady=4)
         ctrl.pack(fill="x", padx=10)
-        tk.Button(ctrl, text="Select All", font=("Consolas", 9),
+        tk.Button(ctrl, text="Select All", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["text"], relief="flat", padx=8,
                   activebackground=C["surface1"],
                   command=self._select_all).pack(side="left", padx=(0, 4))
-        tk.Button(ctrl, text="Deselect All", font=("Consolas", 9),
+        tk.Button(ctrl, text="Deselect All", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["text"], relief="flat", padx=8,
                   activebackground=C["surface1"],
                   command=self._deselect_all).pack(side="left")
@@ -314,22 +425,6 @@ class SqlSelectorDialog(tk.Toplevel):
         self._scroll_frame.bind("<Configure>", _on_frame_resize)
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_win, width=e.width))
         
-        def _scroll_if_canvas(e):
-            w = e.widget
-            # 위젯 자신 또는 부모 체인에 Combobox/Spinbox/Entry가 있으면 무시
-            def _has_interactive_ancestor(widget):
-                try:
-                    while widget:
-                        if isinstance(widget, (ttk.Combobox, tk.Spinbox, ttk.Spinbox, tk.Entry, tk.Listbox)):
-                            return True
-                        widget = widget.master
-                except Exception:
-                    pass
-                return False
-            if not _has_interactive_ancestor(w):
-                canvas.yview_scroll(-1*(e.delta//120), "units")
-        canvas.bind_all("<MouseWheel>", _scroll_if_canvas)
-
         # 트리 렌더링
         tree = collect_sql_tree(self.sql_dir)
         self._render_tree(self._scroll_frame, tree, prefix="", indent=0)
@@ -337,16 +432,16 @@ class SqlSelectorDialog(tk.Toplevel):
         # 하단 버튼
         btn_bar = tk.Frame(self, bg=C["mantle"], pady=8)
         btn_bar.pack(fill="x")
-        self._count_label = tk.Label(btn_bar, text="", font=("Consolas", 9),
+        self._count_label = tk.Label(btn_bar, text="", font=FONTS["mono_small"],
                                      bg=C["mantle"], fg=C["subtext"])
         self._count_label.pack(side="left", padx=14)
         self._update_count()
 
-        tk.Button(btn_bar, text="Cancel", font=("Consolas", 10),
+        tk.Button(btn_bar, text="Cancel", font=FONTS["mono"],
                   bg=C["surface0"], fg=C["text"], relief="flat", padx=14, pady=4,
                   activebackground=C["surface1"],
                   command=self.destroy).pack(side="right", padx=8)
-        tk.Button(btn_bar, text="✔  OK", font=("Consolas", 10, "bold"),
+        tk.Button(btn_bar, text="✔  OK", font=FONTS["body_bold"],
                   bg=C["green"], fg=C["crust"], relief="flat", padx=14, pady=4,
                   activebackground=C["teal"],
                   command=self._confirm).pack(side="right", padx=(0, 4))
@@ -368,7 +463,7 @@ class SqlSelectorDialog(tk.Toplevel):
                 row, text=f"  {fname}", variable=var,
                 bg=C["crust"], fg=C["text"], selectcolor=C["surface0"],
                 activebackground=C["crust"], activeforeground=C["text"],
-                font=("Consolas", 9), anchor="w"
+                font=FONTS["mono_small"], anchor="w"
             )
             cb.pack(fill="x", side="left", padx=(pad, 0))
 
@@ -401,7 +496,7 @@ class SqlSelectorDialog(tk.Toplevel):
             folder_btn = tk.Button(
                 folder_row,
                 text=f"  ▼  {key}",
-                font=("Consolas", 9, "bold"),
+                font=(FONT_MONO, 9, "bold"),
                 bg=C["crust"], fg=C["blue"], relief="flat",
                 anchor="w", padx=pad
             )
@@ -410,13 +505,13 @@ class SqlSelectorDialog(tk.Toplevel):
 
             # 폴더 전체 선택 버튼
             tk.Button(
-                folder_row, text="All", font=("Consolas", 8),
+                folder_row, text="All", font=FONTS["shortcut"],
                 bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6,
                 activebackground=C["surface1"],
                 command=lambda fp=folder_prefix, nd=sub: self._select_folder(fp, nd, True)
             ).pack(side="right", padx=2)
             tk.Button(
-                folder_row, text="None", font=("Consolas", 8),
+                folder_row, text="None", font=FONTS["shortcut"],
                 bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6,
                 activebackground=C["surface1"],
                 command=lambda fp=folder_prefix, nd=sub: self._select_folder(fp, nd, False)
@@ -469,62 +564,197 @@ class SqlSelectorDialog(tk.Toplevel):
 
 
 # ─────────────────────────────────────────────────────────────
+# 접이식 섹션 위젯
+# ─────────────────────────────────────────────────────────────
+class CollapsibleSection(tk.Frame):
+    """클릭으로 접기/펼치기 가능한 섹션 위젯"""
+
+    def __init__(self, parent, title, color_key="blue", expanded=True, **kw):
+        super().__init__(parent, bg=C["mantle"], **kw)
+        self._expanded = expanded
+        self._color_key = color_key
+
+        # 헤더
+        self._header = tk.Frame(self, bg=C["surface0"], cursor="hand2")
+        self._header.pack(fill="x", padx=4, pady=(6, 0))
+
+        self._color_bar = tk.Frame(self._header, bg=C[color_key], width=3)
+        self._color_bar.pack(side="left", fill="y")
+        self._color_bar.pack_propagate(False)
+
+        self._toggle_label = tk.Label(
+            self._header, text=" ▼ " if expanded else " ▶ ",
+            font=FONTS["h2"], bg=C["surface0"], fg=C[color_key]
+        )
+        self._toggle_label.pack(side="left", padx=(4, 0))
+
+        self._title_label = tk.Label(
+            self._header, text=title, font=FONTS["h2"],
+            bg=C["surface0"], fg=C["text"]
+        )
+        self._title_label.pack(side="left", padx=(2, 8), pady=5)
+
+        # 본문
+        self._body = tk.Frame(self, bg=C["mantle"])
+        if expanded:
+            self._body.pack(fill="x")
+
+        # 클릭 바인딩
+        for w in (self._header, self._toggle_label, self._title_label, self._color_bar):
+            w.bind("<Button-1>", lambda e: self.toggle())
+
+    @property
+    def body(self):
+        return self._body
+
+    def toggle(self):
+        self._expanded = not self._expanded
+        if self._expanded:
+            self._body.pack(fill="x")
+            self._toggle_label.config(text=" ▼ ")
+        else:
+            self._body.pack_forget()
+            self._toggle_label.config(text=" ▶ ")
+
+
+# ─────────────────────────────────────────────────────────────
+# Stage 토글 버튼 설정
+# ─────────────────────────────────────────────────────────────
+STAGE_CONFIG = [
+    ("export",     "Export",    "blue"),
+    ("load_local", "Load",      "teal"),
+    ("transform",  "Transform", "mauve"),
+    ("report",     "Report",    "peach"),
+]
+
+
+# ─────────────────────────────────────────────────────────────
 # 메인 GUI
 # ─────────────────────────────────────────────────────────────
 class BatchRunnerGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("ELT Runner  v1.91")
-        self.geometry("1200x740")
-        self.minsize(900, 560)
+        self.geometry("1340x800")
+        self.minsize(1000, 620)
         self.configure(bg=C["base"])
 
         self._process: subprocess.Popen | None = None
         self._work_dir = tk.StringVar(value=str(Path(".").resolve()))
-        self._selected_sqls: set[str] = set()  # relative paths (from sql_dir in job)
+        self._selected_sqls: set[str] = set()
 
-        self._jobs: dict = {}          # {filename: parsed yml}
-        self._env_hosts: dict = {}     # {type: [hosts]}
-        self._stage_vars: dict[str, tk.BooleanVar] = {}  # stage 선택 vars
-        self._pipeline_widgets: list = []  # pipeline 버튼 참조
-        self._presets: dict = {}   # {name: snapshot}
+        self._jobs: dict = {}
+        self._env_hosts: dict = {}
+        self._presets: dict = {}
         self._theme_var = tk.StringVar(value="Mocha")
         self._preset_var = tk.StringVar()
-        # Job Override 위젯 변수들
+
+        # Job / Run Mode
+        self.job_var = tk.StringVar()
+        self.mode_var = tk.StringVar(value="run")
+        self._env_path_var = tk.StringVar(value="config/env.yml")
+        self._debug_var = tk.BooleanVar(value=False)
+
+        # ── 1급 설정 변수 (Settings-First) ──────────────────────
+        # Source
+        self._source_type_var = tk.StringVar(value="oracle")
+        self._source_host_var = tk.StringVar(value="")
+        # Target
+        self._target_type_var = tk.StringVar(value="duckdb")
+        self._target_db_path  = tk.StringVar(value="data/local/result.duckdb")
+        self._target_schema   = tk.StringVar(value="")
+        # Export paths
+        self._export_sql_dir  = tk.StringVar(value="sql/export")
+        self._export_out_dir  = tk.StringVar(value="data/export")
+        # Transform / Report paths
+        self._transform_sql_dir = tk.StringVar(value="sql/transform/duckdb")
+        self._report_sql_dir    = tk.StringVar(value="sql/report")
+        self._report_out_dir    = tk.StringVar(value="data/report")
+        # Stages — 4개 고정 BooleanVar
+        self._stage_export     = tk.BooleanVar(value=True)
+        self._stage_load_local = tk.BooleanVar(value=True)
+        self._stage_transform  = tk.BooleanVar(value=True)
+        self._stage_report     = tk.BooleanVar(value=True)
+        # Stage 버튼 dict (토글 버튼 참조용)
+        self._stage_buttons: dict = {}
+
+        # Advanced overrides
         self._ov_overwrite    = tk.BooleanVar(value=False)
         self._ov_workers      = tk.IntVar(value=1)
         self._ov_compression  = tk.StringVar(value="gzip")
-        self._ov_out_dir      = tk.StringVar(value="")
-        self._ov_db_path      = tk.StringVar(value="")
-        self._ov_schema       = tk.StringVar(value="")
         self._ov_on_error     = tk.StringVar(value="stop")
         self._ov_excel        = tk.BooleanVar(value=True)
         self._ov_csv          = tk.BooleanVar(value=True)
         self._ov_max_files    = tk.IntVar(value=10)
         self._ov_skip_sql     = tk.BooleanVar(value=False)
         self._ov_union_dir    = tk.StringVar(value="")
-        self._ov_sql_dir      = tk.StringVar(value="")
+        self._ov_timeout      = tk.StringVar(value="1800")
+
+        # 검색 상태
+        self._search_var = tk.StringVar()
+        self._search_matches = []
+        self._search_match_idx = 0
+        # 애니메이션 상태
+        self._anim_id = None
+        self._anim_dots = 0
 
         self._build_style()
         self._build_ui()
         self._reload_project()
         self._load_presets()
         self._bind_shortcuts()
+        self._load_geometry()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _bind_shortcuts(self):
         """전역 단축키 바인딩"""
-        self.bind_all("<F5>",         lambda e: self._on_run()  if self._run_btn["state"] != "disabled" else None)
+        self.bind_all("<F5>",         lambda e: self._run_btn.invoke() if self._run_btn["state"] != "disabled" else None)
+        self.bind_all("<Control-F5>", lambda e: self._dryrun_btn.invoke() if self._dryrun_btn["state"] != "disabled" else None)
         self.bind_all("<Escape>",     lambda e: self._on_stop() if self._stop_btn["state"] != "disabled" else None)
         self.bind_all("<Control-s>",  lambda e: self._on_preset_save())
         self.bind_all("<Control-r>",  lambda e: self._reload_project())
         self.bind_all("<Control-l>",  lambda e: self._export_log())
+        self.bind_all("<Control-f>",  lambda e: self._toggle_search())
+
+    # ── 설정 저장/복원 ─────────────────────────────────────────
+    def _load_geometry(self):
+        try:
+            if _CONF_PATH.exists():
+                conf = json.loads(_CONF_PATH.read_text(encoding="utf-8"))
+                if "geometry" in conf:
+                    self.geometry(conf["geometry"])
+                if "theme" in conf and conf["theme"] in THEMES:
+                    if conf["theme"] != self._theme_var.get():
+                        self._theme_var.set(conf["theme"])
+                        self._apply_theme()
+                # 마지막 설정 복원
+                if "snapshot" in conf:
+                    self._restore_snapshot(conf["snapshot"])
+        except Exception:
+            pass
+
+    def _save_geometry(self):
+        try:
+            conf = {
+                "geometry": self.geometry(),
+                "theme": self._theme_var.get(),
+                "snapshot": self._snapshot(),
+            }
+            _CONF_PATH.write_text(
+                json.dumps(conf, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _on_close(self):
+        self._save_geometry()
+        self.destroy()
 
     def _export_log(self):
         """로그 내용을 .txt 파일로 저장"""
         from tkinter import filedialog
         import datetime
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        fname = self.job_var.get().replace(".yml","") or "elt_runner"
+        fname = (self.job_var.get().replace(".yml","") if hasattr(self, "job_var") and self.job_var.get() else "") or "elt_runner"
         init_file = f"{fname}_log_{ts}.txt"
         path = filedialog.asksaveasfilename(
             defaultextension=".txt",
@@ -580,12 +810,18 @@ class BatchRunnerGUI(tk.Tk):
         self.option_add("*TCombobox*Listbox.foreground",  C["text"])
         self.option_add("*TCombobox*Listbox.selectBackground", C["blue"])
         self.option_add("*TCombobox*Listbox.selectForeground", C["crust"])
-        self.option_add("*TCombobox*Listbox.font", "Consolas 9")
+        self.option_add("*TCombobox*Listbox.font", f"{FONT_MONO} 10")
         style.configure("TSeparator", background=C["surface0"])
         style.configure("TScrollbar",
                         background=C["surface0"],
                         troughcolor=C["crust"],
                         arrowcolor=C["text"])
+        style.configure("green.Horizontal.TProgressbar",
+                        troughcolor=C["surface0"],
+                        background=C["green"],
+                        lightcolor=C["green"],
+                        darkcolor=C["green"],
+                        bordercolor=C["surface0"])
         # 선택된 텍스트 색상 명시 (Mocha/Nord에서 흰 bg + 흰 fg 방지)
         style.map("TCombobox",
                   fieldbackground=[("readonly", C["surface0"]),
@@ -594,6 +830,35 @@ class BatchRunnerGUI(tk.Tk):
                                ("disabled", C["overlay0"])],
                   selectbackground=[("readonly", C["surface0"])],
                   selectforeground=[("readonly", C["text"])])
+
+    # ── 마우스휠 ─────────────────────────────────────────────
+    def _setup_mousewheel(self):
+        """콤보박스/스핀박스 마우스휠 차단 + 위치 기반 캔버스 스크롤"""
+        self.bind_class("TCombobox", "<MouseWheel>", lambda e: "break")
+        self.bind_class("Spinbox", "<MouseWheel>", lambda e: "break")
+
+        def _on_mousewheel(e):
+            try:
+                mx, my = self.winfo_pointerxy()
+                w = self.winfo_containing(mx, my)
+                if w is None:
+                    return
+                # 위젯 → 부모 체인을 따라가며 Canvas 탐색
+                widget = w
+                while widget:
+                    if isinstance(widget, (ttk.Combobox, tk.Spinbox, ttk.Spinbox)):
+                        return "break"
+                    if isinstance(widget, tk.Canvas):
+                        widget.yview_scroll(-1 * (e.delta // 120), "units")
+                        return "break"
+                    try:
+                        widget = widget.master
+                    except Exception:
+                        break
+            except Exception:
+                pass
+
+        self.bind_all("<MouseWheel>", _on_mousewheel)
 
     # ── UI 조립 ──────────────────────────────────────────────
     def _build_ui(self):
@@ -604,9 +869,10 @@ class BatchRunnerGUI(tk.Tk):
         main = tk.Frame(self, bg=C["base"])
         main.pack(fill="both", expand=True, padx=10, pady=(4, 0))
 
-        left = tk.Frame(main, bg=C["mantle"], width=380)
+        left = tk.Frame(main, bg=C["mantle"], width=430)
         left.pack(side="left", fill="y", padx=(0, 8))
         left.pack_propagate(False)
+        self._left_frame = left
         self._build_left(left)
 
         right = tk.Frame(main, bg=C["mantle"])
@@ -616,38 +882,49 @@ class BatchRunnerGUI(tk.Tk):
         # 하단 버튼 바
         self._build_button_bar()
 
+        # 마우스휠 바인딩 (위치 기반)
+        self._setup_mousewheel()
+
     def _build_title_bar(self):
         self._title_bar = tk.Frame(self, bg=C["crust"], pady=7)
         self._title_bar.pack(fill="x")
         bar = self._title_bar
 
         # Work Dir
-        tk.Label(bar, text="Work Dir:", font=("Consolas", 10),
+        tk.Label(bar, text="Work Dir:", font=FONTS["body"],
                  bg=C["crust"], fg=C["subtext"]).pack(side="left", padx=(14, 4))
         self._wd_entry = tk.Entry(bar, textvariable=self._work_dir,
                             bg=C["surface0"], fg=C["text"],
                             insertbackground=C["text"], relief="flat",
-                            font=("Consolas", 10), width=38)
-        self._wd_entry.pack(side="left")
-        self._wd_btn = tk.Button(bar, text="…", font=("Consolas", 10),
+                            font=FONTS["mono"], width=60)
+        self._wd_entry.pack(side="left", ipady=2)
+        self._wd_btn = tk.Button(bar, text="…", font=FONTS["mono"],
                   bg=C["surface0"], fg=C["text"], relief="flat", padx=6,
                   activebackground=C["surface1"],
                   command=self._browse_workdir)
         self._wd_btn.pack(side="left", padx=2)
-        self._reload_btn = tk.Button(bar, text="↺ Reload", font=("Consolas", 10),
+        self._reload_btn = tk.Button(bar, text="↺ Reload", font=FONTS["button_sm"],
                   bg=C["blue"], fg=C["crust"], relief="flat", padx=8,
                   activebackground=C["sky"],
                   command=self._reload_project)
         self._reload_btn.pack(side="left", padx=6)
 
-        # 테마 선택 (우측)
-        tk.Label(bar, text="Theme:", font=("Consolas", 9),
-                 bg=C["crust"], fg=C["subtext"]).pack(side="right", padx=(0, 4))
+        # env yml
+        tk.Label(bar, text="env:", font=FONTS["body"],
+                 bg=C["crust"], fg=C["subtext"]).pack(side="left", padx=(10, 4))
+        tk.Entry(bar, textvariable=self._env_path_var,
+                 bg=C["surface0"], fg=C["text"],
+                 insertbackground=C["text"], relief="flat",
+                 font=FONTS["mono"], width=20).pack(side="left", ipady=2)
+
+        # 테마 선택 (우측) — combo 먼저 pack해야 우측 끝에 배치
         self._theme_combo = ttk.Combobox(bar, textvariable=self._theme_var,
                                          values=list(THEMES.keys()),
-                                         state="readonly", font=("Consolas", 9), width=8)
+                                         state="readonly", font=FONTS["mono_small"], width=16)
         self._theme_combo.pack(side="right", padx=(0, 10))
         self._theme_combo.bind("<<ComboboxSelected>>", lambda _: self._apply_theme())
+        tk.Label(bar, text="Theme:", font=FONTS["small"],
+                 bg=C["crust"], fg=C["subtext"]).pack(side="right", padx=(0, 4))
 
     # ── 좌측 옵션 패널 ───────────────────────────────────────
     def _build_left(self, parent):
@@ -664,396 +941,419 @@ class BatchRunnerGUI(tk.Tk):
             canvas.itemconfig(win, width=canvas.winfo_width())
         ))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
-        def _scroll_if_canvas(e):
-            w = e.widget
-            def _has_interactive_ancestor(widget):
-                try:
-                    while widget:
-                        if isinstance(widget, (ttk.Combobox, tk.Spinbox, ttk.Spinbox, tk.Entry, tk.Listbox)):
-                            return True
-                        widget = widget.master
-                except Exception:
-                    pass
-                return False
-            if not _has_interactive_ancestor(w):
-                canvas.yview_scroll(-1*(e.delta//120), "units")
-        canvas.bind_all("<MouseWheel>", _scroll_if_canvas)
 
+        self._left_canvas = canvas
         self._left_inner = inner
         self._build_option_sections(inner)
 
     def _build_option_sections(self, parent):
-        def sec(text):
-            f = tk.Frame(parent, bg=C["mantle"])
-            f.pack(fill="x", padx=12, pady=(10, 2))
-            tk.Label(f, text=text, font=("맑은 고딕", 10, "bold"),
-                     bg=C["mantle"], fg=C["blue"]).pack(side="left")
-            return f
-
-        def sep():
-            ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=8, pady=3)
-
-        def entry_row(parent_frame, label, var, **kw):
-            row = tk.Frame(parent_frame, bg=C["mantle"])
-            row.pack(fill="x", padx=12, pady=2)
-            tk.Label(row, text=label, font=("Consolas", 9),
-                     bg=C["mantle"], fg=C["subtext"], width=12, anchor="w").pack(side="left")
-            e = tk.Entry(row, textvariable=var, bg=C["surface0"], fg=C["text"],
-                         insertbackground=C["text"], relief="flat",
-                         font=("Consolas", 9), **kw)
-            e.pack(side="left", fill="x", expand=True)
-            return e
-
-        tk.Label(parent, text="Options", font=("Consolas", 13, "bold"),
+        tk.Label(parent, text="Settings", font=FONTS["h1"],
                  bg=C["mantle"], fg=C["text"]).pack(pady=(14, 4), padx=12, anchor="w")
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=8)
 
-        # ── Job / Run Mode / Stages 3-zone 레이아웃 ──
-        # 바깥 grid: col0=Job+Stages, col1=RunMode
-        jm_outer = tk.Frame(parent, bg=C["mantle"])
-        jm_outer.pack(fill="x", padx=12, pady=(8, 0))
-        jm_outer.columnconfigure(0, weight=1)
-        jm_outer.columnconfigure(1, weight=0)
+        self._build_source_section(parent)      # 1. Source Type + Host       [펼침, teal]
+        self._build_target_section(parent)      # 2. Target Type + DB/Schema  [펼침, mauve]
+        self._build_paths_section(parent)       # 3. export.sql_dir, out_dir  [펼침, blue]
+        self._build_stages_section(parent)      # 4. 4개 토글 버튼            [펼침, green]
+        self._build_params_section(parent)      # 5. Params key=value         [펼침, green]
+        self._build_advanced_section(parent)    # 6. SQL Filter / 세부 옵션   [접힘, sky]
+        self._build_job_preset_section(parent)  # 7. Job + Presets + Run Mode [접힘, peach]
 
-        # ── 헤더 행 (row=0): Job 레이블 | Run Mode 레이블 ──
-        tk.Label(jm_outer, text="Job  (--job)", font=("Consolas", 9, "bold"),
-                 bg=C["mantle"], fg=C["blue"]).grid(
-                     row=0, column=0, sticky="w", pady=(0, 2))
-        tk.Label(jm_outer, text="Run Mode", font=("Consolas", 9, "bold"),
-                 bg=C["mantle"], fg=C["blue"]).grid(
-                     row=0, column=1, sticky="nw", padx=(16, 0), pady=(0, 2))
+        # 변경 감지 → preview 갱신
+        for ov_var in (self._ov_compression, self._ov_on_error,
+                       self._ov_union_dir, self._ov_timeout,
+                       self._export_sql_dir, self._export_out_dir,
+                       self._target_db_path, self._target_schema,
+                       self._transform_sql_dir, self._report_sql_dir,
+                       self._report_out_dir, self._source_host_var):
+            ov_var.trace_add("write", lambda *_: self._refresh_preview())
+        for var in (self.job_var, self.mode_var, self._env_path_var, self._debug_var):
+            var.trace_add("write", lambda *_: self._refresh_preview())
+        # auto-suggest 트리거
+        self._export_sql_dir.trace_add("write", lambda *_: self.after(300, self._on_export_sql_dir_change))
+        self._target_type_var.trace_add("write", lambda *_: self._refresh_preview())
 
-        # ── row=1: Job 콤보 | Plan 라디오 ──
-        self.job_var = tk.StringVar()
-        self._job_combo = ttk.Combobox(jm_outer, textvariable=self.job_var,
-                                       state="readonly", font=("Consolas", 10), width=18)
-        self._job_combo.grid(row=1, column=0, sticky="ew")
-        self._job_combo.bind("<<ComboboxSelected>>", self._on_job_change)
+    # ── 헬퍼 ─────────────────────────────────────────────────
+    def _entry_row(self, parent_frame, label, var, **kw):
+        row = tk.Frame(parent_frame, bg=C["mantle"])
+        row.pack(fill="x", padx=12, pady=2)
+        tk.Label(row, text=label, font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        e = tk.Entry(row, textvariable=var, bg=C["surface0"], fg=C["text"],
+                     insertbackground=C["text"], relief="flat",
+                     font=FONTS["mono"], **kw)
+        e.pack(side="left", fill="x", expand=True, ipady=2)
+        return e
 
-        self.mode_var = tk.StringVar(value="run")
-        for r_idx, (m, label, color) in enumerate([
-                ("plan",  "Plan (Dryrun)", C["yellow"]),
-                ("run",   "Run",           C["green"]),
-                ("retry", "Retry",         C["peach"])]):
-            tk.Radiobutton(jm_outer, text=label, variable=self.mode_var, value=m,
-                           bg=C["mantle"], fg=color, selectcolor=C["surface0"],
-                           activebackground=C["mantle"], activeforeground=color,
-                           font=("Consolas", 9)).grid(
-                               row=1 + r_idx, column=1, sticky="w", padx=(16, 0))
+    def _ov_row(self, parent_frame, label, widget_fn, note=""):
+        r = tk.Frame(parent_frame, bg=C["mantle"])
+        r.pack(fill="x", padx=12, pady=2)
+        tk.Label(r, text=label, font=FONTS["mono_small"], width=18, anchor="w",
+                 bg=C["mantle"], fg=C["subtext"]).pack(side="left")
+        widget_fn(r)
+        if note:
+            tk.Label(r, text=note, font=FONTS["shortcut"],
+                     bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=4)
 
-        # ── row=2~3: Stages 2×2 그리드 (col=0, Job 콤보 아래) ──
-        self._pipeline_frame = tk.Frame(jm_outer, bg=C["mantle"])
-        self._pipeline_frame.grid(row=2, column=0, sticky="w", pady=(6, 0))
-        self._pipeline_widgets = []
+    def _path_row(self, parent_frame, label, var, browse_title="Select folder"):
+        """경로 입력 + ... 버튼 행 (경로+버튼 우측 정렬)"""
+        row = tk.Frame(parent_frame, bg=C["mantle"])
+        row.pack(fill="x", padx=12, pady=2)
+        tk.Label(row, text=label, font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=18, anchor="w").pack(side="left")
+        def _browse():
+            wd = self._work_dir.get()
+            d = filedialog.askdirectory(initialdir=var.get() or wd, title=browse_title)
+            if d:
+                try:
+                    rel = Path(d).relative_to(Path(wd))
+                    var.set(rel.as_posix())
+                except ValueError:
+                    var.set(d)
+        tk.Button(row, text="...", font=FONTS["mono_small"],
+                  bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
+                  activebackground=C["surface1"],
+                  command=_browse).pack(side="right", padx=(2, 0))
+        tk.Entry(row, textvariable=var, bg=C["surface0"], fg=C["text"],
+                 insertbackground=C["text"], relief="flat",
+                 font=FONTS["mono"], width=16).pack(side="right", fill="x", expand=True, ipady=2)
 
-        sep()
+    # ── 1) Source ─────────────────────────────────────────────
+    def _build_source_section(self, parent):
+        sec = CollapsibleSection(parent, "Source", color_key="teal", expanded=True)
+        sec.pack(fill="x")
+        body = sec.body
 
-        # ── Env 파일 ──
-        sec("Env file  (--env)")
-        self._env_path_var = tk.StringVar(value="config/env.yml")
-        entry_row(parent, "env yml:", self._env_path_var)
+        # Source Type
+        row1 = tk.Frame(body, bg=C["mantle"])
+        row1.pack(fill="x", padx=12, pady=(8, 2))
+        tk.Label(row1, text="Source Type", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        self._source_type_combo = ttk.Combobox(
+            row1, textvariable=self._source_type_var,
+            state="readonly", font=FONTS["mono"], width=10)
+        self._source_type_combo.pack(side="left")
+        self._source_type_combo.bind("<<ComboboxSelected>>", self._on_source_type_change)
+        tk.Label(row1, text="overwrite", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"]).pack(side="left", padx=(10, 0))
+        tk.Checkbutton(row1, variable=self._ov_overwrite, text="",
+                       bg=C["mantle"], fg=C["text"], selectcolor=C["surface0"],
+                       activebackground=C["mantle"],
+                       command=self._refresh_preview).pack(side="left")
 
-        sep()
+        # Host + timeout
+        row2 = tk.Frame(body, bg=C["mantle"])
+        row2.pack(fill="x", padx=12, pady=(2, 6))
+        tk.Label(row2, text="Host", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        self._host_combo = ttk.Combobox(
+            row2, textvariable=self._source_host_var,
+            state="readonly", font=FONTS["mono"], width=10)
+        self._host_combo.pack(side="left")
+        self._host_combo.bind("<<ComboboxSelected>>", lambda _: self._refresh_preview())
+        tk.Label(row2, text="timeout", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"]).pack(side="left", padx=(10, 4))
+        tk.Entry(row2, textvariable=self._ov_timeout,
+                 bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
+                 relief="flat", font=FONTS["mono_small"], width=6).pack(side="left", ipady=2)
+        tk.Label(row2, text="sec", font=FONTS["shortcut"],
+                 bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=4)
 
-        # ── Source host ──
-        sec("Source Host  (--set source.host=)")
-        host_outer = tk.Frame(parent, bg=C["mantle"])
-        host_outer.pack(fill="x", padx=12, pady=(2, 4))
-        host_list_frame = tk.Frame(host_outer, bg=C["surface0"])
-        host_list_frame.pack(side="left", fill="x", expand=True)
-        self._host_listbox = tk.Listbox(
-            host_list_frame, font=("Consolas", 9), height=4,
-            bg=C["surface0"], fg=C["text"],
-            selectbackground=C["blue"], selectforeground=C["crust"],
-            relief="flat", bd=0, activestyle="none",
-            exportselection=False  # ← 다른 위젯 선택해도 해제 안됨 (핵심!)
-        )
-        host_scroll = ttk.Scrollbar(host_list_frame, orient="vertical",
-                                    command=self._host_listbox.yview)
-        self._host_listbox.config(yscrollcommand=host_scroll.set)
-        self._host_listbox.pack(side="left", fill="both", expand=True)
-        host_scroll.pack(side="right", fill="y")
-        self._host_listbox.bind("<<ListboxSelect>>", lambda _: self._refresh_preview())
-        tk.Label(host_outer, text=" → --set source.host", font=("Consolas", 7),
-                 bg=C["mantle"], fg=C["overlay0"], justify="left").pack(side="left", padx=4)
+    # ── 2) Target ─────────────────────────────────────────────
+    def _build_target_section(self, parent):
+        sec = CollapsibleSection(parent, "Target", color_key="mauve", expanded=True)
+        sec.pack(fill="x")
+        body = sec.body
 
-        sep()
+        # Target Type
+        row1 = tk.Frame(body, bg=C["mantle"])
+        row1.pack(fill="x", padx=12, pady=(8, 2))
+        tk.Label(row1, text="Target Type", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        self._target_type_combo = ttk.Combobox(
+            row1, textvariable=self._target_type_var,
+            values=["duckdb", "sqlite3", "oracle"],
+            state="readonly", font=FONTS["mono"], width=14)
+        self._target_type_combo.pack(side="left", fill="x", expand=True)
+        self._target_type_combo.bind("<<ComboboxSelected>>", self._on_target_type_change)
 
-        # ── Params ──
-        sec("Params  (--param)")
-        self._params_frame = tk.Frame(parent, bg=C["mantle"])
+        # DB Path (duckdb/sqlite3)
+        self._db_path_row = tk.Frame(body, bg=C["mantle"])
+        self._db_path_row.pack(fill="x", padx=12, pady=2)
+        tk.Label(self._db_path_row, text="DB Path", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        tk.Entry(self._db_path_row, textvariable=self._target_db_path,
+                 bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
+                 relief="flat", font=FONTS["mono"], width=16).pack(side="left", fill="x", expand=True, ipady=2)
+        def _browse_db():
+            d = filedialog.asksaveasfilename(
+                initialdir=self._work_dir.get(),
+                defaultextension=".duckdb",
+                filetypes=[("DuckDB", "*.duckdb"), ("SQLite", "*.db *.sqlite3"), ("All", "*.*")],
+                title="Select DB file")
+            if d:
+                try:
+                    rel = Path(d).relative_to(Path(self._work_dir.get()))
+                    self._target_db_path.set(rel.as_posix())
+                except ValueError:
+                    self._target_db_path.set(d)
+        tk.Button(self._db_path_row, text="...", font=FONTS["mono_small"],
+                  bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
+                  activebackground=C["surface1"],
+                  command=_browse_db).pack(side="left", padx=(2, 0))
+
+        # Schema (oracle)
+        self._schema_row = tk.Frame(body, bg=C["mantle"])
+        tk.Label(self._schema_row, text="Schema", font=FONTS["mono_small"],
+                 bg=C["mantle"], fg=C["subtext"], width=14, anchor="w").pack(side="left")
+        tk.Entry(self._schema_row, textvariable=self._target_schema,
+                 bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
+                 relief="flat", font=FONTS["mono"], width=16).pack(side="left", fill="x", expand=True, ipady=2)
+
+        # Oracle target 힌트 (host=local 연결 안내)
+        self._oracle_hint_row = tk.Frame(body, bg=C["mantle"])
+        tk.Label(self._oracle_hint_row, text="⚠  Target Oracle → source.host=local 로 연결됩니다",
+                 font=FONTS["small"], bg=C["mantle"], fg=C["yellow"]).pack(anchor="w", padx=14, pady=(2, 4))
+
+        self._update_target_visibility()
+
+    # ── 3) Paths — Export ─────────────────────────────────────
+    def _build_paths_section(self, parent):
+        sec = CollapsibleSection(parent, "Paths \u2014 Export", color_key="blue", expanded=True)
+        sec.pack(fill="x")
+        body = sec.body
+
+        self._path_row(body, "export.sql_dir", self._export_sql_dir, "Select SQL dir")
+        self._path_row(body, "export.out_dir", self._export_out_dir, "Select output dir")
+
+    # ── 4) Stages — 토글 버튼 ────────────────────────────────
+    def _build_stages_section(self, parent):
+        sec = CollapsibleSection(parent, "Stages", color_key="yellow", expanded=True)
+        sec.pack(fill="x")
+        body = sec.body
+
+        btn_frame = tk.Frame(body, bg=C["mantle"])
+        btn_frame.pack(fill="x", padx=12, pady=(8, 2))
+
+        self._stage_buttons = {}
+        for stage_key, label, color_key in STAGE_CONFIG:
+            btn = tk.Button(btn_frame, text=label, font=(FONT_FAMILY, 9, "bold"),
+                            relief="flat", width=9, pady=4, bd=0,
+                            command=lambda sk=stage_key: self._toggle_stage(sk))
+            btn.pack(side="left", padx=(0, 4), fill="x", expand=True)
+            self._stage_buttons[stage_key] = (btn, color_key)
+
+        self._refresh_stage_buttons()
+
+        # all / none
+        ctrl = tk.Frame(body, bg=C["mantle"])
+        ctrl.pack(fill="x", padx=12, pady=(2, 6))
+        for txt, cmd in [("all", self._stages_all), ("none", self._stages_none)]:
+            tk.Button(ctrl, text=txt, font=FONTS["shortcut"],
+                      bg=C["surface0"], fg=C["subtext"], relief="flat",
+                      padx=5, pady=0, activebackground=C["surface1"],
+                      command=cmd).pack(side="left", padx=(0, 6))
+
+    # ── 5) Params ─────────────────────────────────────────────
+    def _build_params_section(self, parent):
+        sec = CollapsibleSection(parent, "Params  (--param)", color_key="green", expanded=True)
+        sec.pack(fill="x")
+        body = sec.body
+
+        self._params_frame = tk.Frame(body, bg=C["mantle"])
         self._params_frame.pack(fill="x", padx=12)
         self._param_entries: list[tuple[tk.StringVar, tk.StringVar]] = []
         self._refresh_param_rows([])
-        tk.Button(parent, text="+ add param", font=("Consolas", 8),
+        tk.Button(body, text="+ add param", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6, pady=2,
                   activebackground=C["surface1"],
-                  command=self._add_param_row).pack(anchor="w", padx=12, pady=(2, 4))
+                  command=self._add_param_row).pack(anchor="w", padx=12, pady=(2, 6))
 
-        sep()
+    # ── 6) Advanced ───────────────────────────────────────────
+    def _build_advanced_section(self, parent):
+        sec = CollapsibleSection(parent, "Advanced", color_key="sky", expanded=False)
+        sec.pack(fill="x")
+        body = sec.body
 
-        # ── SQL 선택 ──
-        sec("SQL 파일 선택 (--sql-filter)")
-        sql_row = tk.Frame(parent, bg=C["mantle"])
+        # ─── SQL Filter ───
+        tk.Label(body, text="SQL Filter", font=FONTS["body_bold"],
+                 bg=C["mantle"], fg=C["sky"]).pack(anchor="w", padx=12, pady=(8, 2))
+        sql_row = tk.Frame(body, bg=C["mantle"])
         sql_row.pack(fill="x", padx=12, pady=(2, 4))
         self._sql_btn = tk.Button(
-            sql_row, text="📂  SQL filter...", font=("Consolas", 9),
+            sql_row, text="SQL filter...", font=FONTS["mono_small"],
             bg=C["surface0"], fg=C["text"], relief="flat", padx=10, pady=4,
             activebackground=C["surface1"],
-            command=self._open_sql_selector
-        )
+            command=self._open_sql_selector)
         self._sql_btn.pack(side="left")
-        self._sql_count_label = tk.Label(sql_row, text="(all)", font=("Consolas", 8),
+        self._sql_count_label = tk.Label(sql_row, text="(all)", font=FONTS["mono_small"],
                                          bg=C["mantle"], fg=C["overlay0"])
         self._sql_count_label.pack(side="left", padx=8)
-
-        # 선택된 SQL 목록 미니 프리뷰
-        self._sql_preview = tk.Text(parent, bg=C["crust"], fg=C["subtext"],
-                                    font=("Consolas", 8), height=4, relief="flat",
+        self._sql_preview = tk.Text(body, bg=C["crust"], fg=C["subtext"],
+                                    font=FONTS["mono_small"], height=3, relief="flat",
                                     bd=4, state="disabled", wrap="none")
-        self._sql_preview.pack(fill="x", padx=12, pady=(0, 4))
+        self._sql_preview.pack(fill="x", padx=12, pady=(0, 6))
 
-        sep()
+        ttk.Separator(body, orient="horizontal").pack(fill="x", padx=12, pady=4)
 
-        # ── Job Override ──
-        sec("Job Override  (--set)")
+        # ─── Export 옵션 ───
+        tk.Label(body, text="Export", font=FONTS["body_bold"],
+                 bg=C["mantle"], fg=C["sky"]).pack(anchor="w", padx=12, pady=(4, 2))
 
-        def ov_row(label, widget_fn, note=""):
-            r = tk.Frame(parent, bg=C["mantle"])
-            r.pack(fill="x", padx=12, pady=2)
-            tk.Label(r, text=label, font=("Consolas", 8), width=18, anchor="w",
-                     bg=C["mantle"], fg=C["subtext"]).pack(side="left")
-            widget_fn(r)
-            if note:
-                tk.Label(r, text=note, font=("Consolas", 7),
-                         bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=4)
-
-        # export.overwrite
-        def _w_overwrite(r):
-            tk.Checkbutton(r, variable=self._ov_overwrite, text="",
-                           bg=C["mantle"], selectcolor=C["surface0"],
-                           activebackground=C["mantle"],
-                           command=self._refresh_preview).pack(side="left")
-        ov_row("export.overwrite", _w_overwrite)
-
-        # export.parallel_workers
         def _w_workers(r):
             tk.Spinbox(r, from_=1, to=16, width=4, textvariable=self._ov_workers,
                        bg=C["surface0"], fg=C["text"], buttonbackground=C["surface1"],
-                       relief="flat", font=("Consolas", 9),
+                       relief="flat", font=FONTS["mono_small"],
                        command=self._refresh_preview).pack(side="left")
-        ov_row("export.workers", _w_workers, "1~16")
+        self._ov_row(body, "export.workers", _w_workers, "1~16")
 
-        # export.compression
         def _w_compression(r):
             ttk.Combobox(r, textvariable=self._ov_compression,
                          values=["gzip", "none"], state="readonly",
-                         font=("Consolas", 9), width=8).pack(side="left")
-        ov_row("export.compression", _w_compression)
+                         font=FONTS["mono_small"], width=8).pack(side="left")
+        self._ov_row(body, "export.compression", _w_compression)
 
-        # export.out_dir
-        def _w_out_dir(r):
-            tk.Entry(r, textvariable=self._ov_out_dir,
-                     bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
-                     relief="flat", font=("Consolas", 8), width=12).pack(side="left", fill="x", expand=True)
-            def browse_out_dir():
-                d = filedialog.askdirectory(
-                    initialdir=self._ov_out_dir.get() or self._work_dir.get(),
-                    title="Select output folder"
-                )
-                if d:
-                    # workdir 기준 상대경로로 변환
-                    try:
-                        rel = Path(d).relative_to(Path(self._work_dir.get()))
-                        self._ov_out_dir.set(rel.as_posix())
-                    except ValueError:
-                        self._ov_out_dir.set(d)
-            tk.Button(r, text="📂", font=("Consolas", 9),
-                      bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
-                      activebackground=C["surface1"],
-                      command=browse_out_dir).pack(side="left", padx=(2, 0))
-        ov_row("export.out_dir", _w_out_dir, "empty = yml default")
+        ttk.Separator(body, orient="horizontal").pack(fill="x", padx=12, pady=4)
 
-        # export.sql_dir
-        def _w_sql_dir(r):
-            tk.Entry(r, textvariable=self._ov_sql_dir,
-                     bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
-                     relief="flat", font=("Consolas", 8), width=12).pack(side="left", fill="x", expand=True)
-            self._ov_sql_dir.trace_add("write", lambda *_: self.after(300, self._scan_and_suggest_params))
+        # ─── Transform 옵션 ───
+        tk.Label(body, text="Transform", font=FONTS["body_bold"],
+                 bg=C["mantle"], fg=C["sky"]).pack(anchor="w", padx=12, pady=(4, 2))
+        self._path_row(body, "transform.sql_dir", self._transform_sql_dir, "Select transform SQL dir")
 
-            def browse_sql_dir():
-                wd = self._work_dir.get()
-                init = self._ov_sql_dir.get() or str(Path(wd) / "sql" / "export")
-                d = filedialog.askdirectory(initialdir=init, title="Select SQL dir")
-                if d:
-                    try:
-                        rel = Path(d).relative_to(Path(wd))
-                        self._ov_sql_dir.set(rel.as_posix())
-                    except ValueError:
-                        self._ov_sql_dir.set(d)
-                    self._scan_and_suggest_params()
-            tk.Button(r, text="📂", font=("Consolas", 9),
-                      bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
-                      activebackground=C["surface1"],
-                      command=browse_sql_dir).pack(side="left", padx=(2, 0))
-        ov_row("export.sql_dir", _w_sql_dir, "empty = yml default")
-
-        # target: db_path / schema (동적으로 show/hide)
-        self._ov_db_path_row = tk.Frame(parent, bg=C["mantle"])
-        self._ov_db_path_row.pack(fill="x", padx=12, pady=2)
-        tk.Label(self._ov_db_path_row, text="target.db_path", font=("Consolas", 8),
-                 width=18, anchor="w", bg=C["mantle"], fg=C["subtext"]).pack(side="left")
-        tk.Entry(self._ov_db_path_row, textvariable=self._ov_db_path,
-                 bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
-                 relief="flat", font=("Consolas", 8), width=16).pack(side="left", fill="x", expand=True)
-        tk.Label(self._ov_db_path_row, text="empty = yml default", font=("Consolas", 7),
-                 bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=4)
-
-        self._ov_schema_row = tk.Frame(parent, bg=C["mantle"])
-        self._ov_schema_row.pack(fill="x", padx=12, pady=2)
-        tk.Label(self._ov_schema_row, text="target.schema", font=("Consolas", 8),
-                 width=18, anchor="w", bg=C["mantle"], fg=C["subtext"]).pack(side="left")
-        tk.Entry(self._ov_schema_row, textvariable=self._ov_schema,
-                 bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
-                 relief="flat", font=("Consolas", 8), width=16).pack(side="left", fill="x", expand=True)
-        tk.Label(self._ov_schema_row, text="Oracle only", font=("Consolas", 7),
-                 bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=4)
-
-        # transform.on_error
         def _w_on_error(r):
             ttk.Combobox(r, textvariable=self._ov_on_error,
                          values=["stop", "continue"], state="readonly",
-                         font=("Consolas", 9), width=8).pack(side="left")
-        ov_row("transform.on_error", _w_on_error)
+                         font=FONTS["mono_small"], width=8).pack(side="left")
+        self._ov_row(body, "transform.on_error", _w_on_error)
 
-        # report.excel.enabled / report.export_csv.enabled
+        ttk.Separator(body, orient="horizontal").pack(fill="x", padx=12, pady=4)
+
+        # ─── Report 옵션 ───
+        tk.Label(body, text="Report", font=FONTS["body_bold"],
+                 bg=C["mantle"], fg=C["sky"]).pack(anchor="w", padx=12, pady=(4, 2))
+        self._path_row(body, "report.sql_dir", self._report_sql_dir, "Select report SQL dir")
+        self._path_row(body, "report.out_dir", self._report_out_dir, "Select report output dir")
+
         def _w_excel(r):
             tk.Checkbutton(r, variable=self._ov_excel, text="",
-                           bg=C["mantle"], selectcolor=C["surface0"],
+                           bg=C["mantle"], fg=C["text"], selectcolor=C["surface0"],
                            activebackground=C["mantle"],
                            command=self._refresh_preview).pack(side="left")
-        ov_row("report.excel", _w_excel)
+        self._ov_row(body, "report.excel", _w_excel)
 
         def _w_csv(r):
             tk.Checkbutton(r, variable=self._ov_csv, text="",
-                           bg=C["mantle"], selectcolor=C["surface0"],
+                           bg=C["mantle"], fg=C["text"], selectcolor=C["surface0"],
                            activebackground=C["mantle"],
                            command=self._refresh_preview).pack(side="left")
-        ov_row("report.csv", _w_csv)
+        self._ov_row(body, "report.csv", _w_csv)
 
-        # report.excel.max_files
         def _w_max_files(r):
             tk.Spinbox(r, from_=1, to=100, width=4, textvariable=self._ov_max_files,
                        bg=C["surface0"], fg=C["text"], buttonbackground=C["surface1"],
-                       relief="flat", font=("Consolas", 9),
+                       relief="flat", font=FONTS["mono_small"],
                        command=self._refresh_preview).pack(side="left")
-        ov_row("report.max_files", _w_max_files)
+        self._ov_row(body, "report.max_files", _w_max_files)
 
-        # report.skip_sql
         def _w_skip_sql(r):
             tk.Checkbutton(r, variable=self._ov_skip_sql, text="",
-                           bg=C["mantle"], selectcolor=C["surface0"],
+                           bg=C["mantle"], fg=C["text"], selectcolor=C["surface0"],
                            activebackground=C["mantle"],
                            command=self._refresh_preview).pack(side="left")
-        ov_row("report.skip_sql", _w_skip_sql, "skip DB → CSV union only")
+        self._ov_row(body, "report.skip_sql", _w_skip_sql, "skip DB -> CSV union only")
 
         # report.csv_union_dir
-        self._ov_union_dir_row = tk.Frame(parent, bg=C["mantle"])
-        self._ov_union_dir_row.pack(fill="x", padx=12, pady=2)
-        tk.Label(self._ov_union_dir_row, text="report.union_dir", font=("Consolas", 8),
+        union_row = tk.Frame(body, bg=C["mantle"])
+        union_row.pack(fill="x", padx=12, pady=2)
+        tk.Label(union_row, text="report.union_dir", font=FONTS["mono_small"],
                  width=18, anchor="w", bg=C["mantle"], fg=C["subtext"]).pack(side="left")
-        tk.Entry(self._ov_union_dir_row, textvariable=self._ov_union_dir,
+        tk.Entry(union_row, textvariable=self._ov_union_dir,
                  bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
-                 relief="flat", font=("Consolas", 8), width=12).pack(side="left", fill="x", expand=True)
-        def browse_union_dir():
+                 relief="flat", font=FONTS["mono_small"], width=12).pack(side="left", fill="x", expand=True, ipady=2)
+        def _browse_union():
             d = filedialog.askdirectory(
                 initialdir=self._ov_union_dir.get() or self._work_dir.get(),
-                title="CSV union source folder"
-            )
+                title="CSV union source folder")
             if d:
                 try:
                     rel = Path(d).relative_to(Path(self._work_dir.get()))
                     self._ov_union_dir.set(rel.as_posix())
                 except ValueError:
                     self._ov_union_dir.set(d)
-        tk.Button(self._ov_union_dir_row, text="📂", font=("Consolas", 9),
+        tk.Button(union_row, text="...", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
                   activebackground=C["surface1"],
-                  command=browse_union_dir).pack(side="left", padx=(2, 0))
-        tk.Label(self._ov_union_dir_row, text="empty = yml default", font=("Consolas", 7),
-                 bg=C["mantle"], fg=C["overlay0"]).pack(side="left", padx=4)
+                  command=_browse_union).pack(side="left", padx=(2, 0))
 
-        # override 변경 감지
-        for ov_var in (self._ov_compression, self._ov_on_error,
-                       self._ov_out_dir, self._ov_db_path, self._ov_schema,
-                       self._ov_union_dir, self._ov_sql_dir):
-            ov_var.trace_add("write", lambda *_: self._refresh_preview())
+    # ── 7) Job / Presets ──────────────────────────────────────
+    def _build_job_preset_section(self, parent):
+        sec = CollapsibleSection(parent, "Job / Presets", color_key="peach", expanded=False)
+        sec.pack(fill="x")
+        body = sec.body
 
-        tk.Button(parent, text="💾  save as yml", font=("Consolas", 8),
-                  bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6, pady=2,
-                  activebackground=C["surface1"],
-                  command=self._on_save_yml).pack(anchor="w", padx=12, pady=(4, 2))
+        # Job 선택
+        tk.Label(body, text="Load Job (--job)", font=FONTS["body_bold"],
+                 bg=C["mantle"], fg=C["peach"]).pack(anchor="w", padx=12, pady=(8, 2))
+        job_row = tk.Frame(body, bg=C["mantle"])
+        job_row.pack(fill="x", padx=12, pady=(0, 4))
+        self._job_combo = ttk.Combobox(job_row, textvariable=self.job_var,
+                                       state="readonly", font=FONTS["mono"], width=18)
+        self._job_combo.pack(side="left", fill="x", expand=True)
+        self._job_combo.bind("<<ComboboxSelected>>", self._on_job_change)
 
-        sep()
-
-        # ── Presets ──
-        sec("Presets")
-        preset_row = tk.Frame(parent, bg=C["mantle"])
-        preset_row.pack(fill="x", padx=12, pady=(2, 2))
+        # Presets
+        tk.Label(body, text="Presets", font=FONTS["body_bold"],
+                 bg=C["mantle"], fg=C["peach"]).pack(anchor="w", padx=12, pady=(4, 2))
+        preset_row = tk.Frame(body, bg=C["mantle"])
+        preset_row.pack(fill="x", padx=12, pady=(0, 2))
         self._preset_combo = ttk.Combobox(preset_row, textvariable=self._preset_var,
-                                          state="readonly", font=("Consolas", 9), width=16)
+                                          state="readonly", font=FONTS["mono_small"], width=16)
         self._preset_combo.pack(side="left", fill="x", expand=True)
         self._preset_combo.bind("<<ComboboxSelected>>", self._on_preset_load)
-        tk.Button(preset_row, text="load", font=("Consolas", 8),
+        tk.Button(preset_row, text="load", font=FONTS["mono_small"],
                   bg=C["blue"], fg=C["crust"], relief="flat", padx=6,
                   activebackground=C["sky"],
                   command=self._on_preset_load).pack(side="left", padx=(4, 2))
-        tk.Button(preset_row, text="🗑", font=("Consolas", 9),
+        tk.Button(preset_row, text="del", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["red"], relief="flat", padx=6,
                   activebackground=C["surface1"],
                   command=self._on_preset_delete).pack(side="left")
-        tk.Button(parent, text="+ save as preset", font=("Consolas", 8),
+
+        btn_row = tk.Frame(body, bg=C["mantle"])
+        btn_row.pack(fill="x", padx=12, pady=(2, 6))
+        tk.Button(btn_row, text="+ save as preset", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6, pady=2,
                   activebackground=C["surface1"],
-                  command=self._on_preset_save).pack(anchor="w", padx=12, pady=(2, 4))
-
-        sep()
-
-        # ── 기타 플래그 ──
-        sec("Options")
-        self._debug_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(parent, text="--debug  (verbose)", variable=self._debug_var,
-                       bg=C["mantle"], fg=C["text"], selectcolor=C["surface0"],
-                       activebackground=C["mantle"], font=("Consolas", 9)
-                       ).pack(anchor="w", padx=12)
-
-        sep()
-
-        # 변경 감지
-        for var in (self.job_var, self.mode_var, self._env_path_var, self._debug_var):
-            var.trace_add("write", lambda *_: self._refresh_preview())
-        # host는 Listbox 사용 (콤보박스 포커스 충돌 버그 근본 해결)
+                  command=self._on_preset_save).pack(side="left", padx=(0, 6))
+        tk.Button(btn_row, text="save as yml", font=FONTS["mono_small"],
+                  bg=C["surface0"], fg=C["subtext"], relief="flat", padx=6, pady=2,
+                  activebackground=C["surface1"],
+                  command=self._on_save_yml).pack(side="left")
 
     # ── 우측 로그 패널 ───────────────────────────────────────
     def _build_right(self, parent):
         header = tk.Frame(parent, bg=C["mantle"])
         header.pack(fill="x")
-        tk.Label(header, text="Run Log", font=("Consolas", 12, "bold"),
+        tk.Label(header, text="Run Log", font=FONTS["h2"],
                  bg=C["mantle"], fg=C["text"]).pack(side="left", padx=14, pady=10)
+        tk.Checkbutton(header, text="--debug", variable=self._debug_var,
+                       bg=C["mantle"], fg=C["text"], selectcolor=C["surface0"],
+                       activebackground=C["mantle"], font=FONTS["mono_small"]
+                       ).pack(side="left", padx=(0, 6))
 
-        self._status_label = tk.Label(header, text="● idle", font=("Consolas", 9),
+        self._status_label = tk.Label(header, text="● idle", font=FONTS["mono_small"],
                                       bg=C["mantle"], fg=C["overlay0"])
         self._status_label.pack(side="right", padx=10)
 
-        tk.Button(header, text="Clear", font=("Consolas", 9),
+        tk.Button(header, text="Clear", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["text"], relief="flat", padx=8,
                   activebackground=C["surface1"],
                   command=self._clear_log).pack(side="right", padx=4)
-        tk.Button(header, text="💾 Log", font=("Consolas", 9),
+        tk.Button(header, text="Save Log", font=FONTS["mono_small"],
                   bg=C["surface0"], fg=C["subtext"], relief="flat", padx=8,
                   activebackground=C["surface1"],
                   command=self._export_log).pack(side="right", padx=(0, 2))
-        tk.Label(header, text="Ctrl+L", font=("Consolas", 7),
+        tk.Label(header, text="Ctrl+L", font=FONTS["shortcut"],
                  bg=C["mantle"], fg=C["overlay0"]).pack(side="right")
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=8)
@@ -1062,29 +1362,58 @@ class BatchRunnerGUI(tk.Tk):
         prog_frame = tk.Frame(parent, bg=C["mantle"])
         prog_frame.pack(fill="x", padx=8, pady=(4, 0))
         self._progress_bar = ttk.Progressbar(prog_frame, mode="determinate",
-                                              maximum=100, value=0)
+                                              maximum=100, value=0,
+                                              style="green.Horizontal.TProgressbar")
         self._progress_bar.pack(side="left", fill="x", expand=True, padx=(4, 6))
-        self._progress_label = tk.Label(prog_frame, text="", font=("Consolas", 9),
+        self._progress_label = tk.Label(prog_frame, text="", font=FONTS["mono_small"],
                                         bg=C["mantle"], fg=C["overlay0"], width=18, anchor="w")
         self._progress_label.pack(side="left")
         self._elapsed_start = None
         self._elapsed_job_id = None
         self._stage_total = 0
 
-        # CLI Preview (우측 상단 고정)
+        # CLI Preview
         preview_frame = tk.Frame(parent, bg=C["mantle"])
         preview_frame.pack(fill="x", padx=8, pady=(6, 0))
-        tk.Label(preview_frame, text="Command", font=("Consolas", 8),
+        tk.Label(preview_frame, text="Command", font=FONTS["mono_small"],
                  bg=C["mantle"], fg=C["overlay0"]).pack(anchor="w", padx=4)
         self._cmd_preview = tk.Text(preview_frame, bg=C["crust"], fg=C["green"],
-                                    font=("Consolas", 8), height=3, relief="flat",
+                                    font=FONTS["cmd"], height=3, relief="flat",
                                     bd=4, wrap="word", state="disabled")
         self._cmd_preview.pack(fill="x", padx=4, pady=(2, 6))
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=8)
 
+        # 검색 바 (Ctrl+F — 초기 숨김)
+        self._search_frame = tk.Frame(parent, bg=C["mantle"])
+        search_inner = tk.Frame(self._search_frame, bg=C["mantle"])
+        search_inner.pack(fill="x", padx=4, pady=4)
+        tk.Label(search_inner, text="Find:", font=FONTS["small"],
+                 bg=C["mantle"], fg=C["subtext"]).pack(side="left", padx=4)
+        self._search_entry = tk.Entry(search_inner, textvariable=self._search_var,
+                                      bg=C["surface0"], fg=C["text"],
+                                      insertbackground=C["text"], relief="flat",
+                                      font=FONTS["mono"], width=20)
+        self._search_entry.pack(side="left", padx=2, ipady=2)
+        self._search_var.trace_add("write", self._on_search_change)
+        self._search_entry.bind("<Return>", lambda e: self._search_next())
+        self._search_entry.bind("<Shift-Return>", lambda e: self._search_prev())
+        self._search_count_label = tk.Label(search_inner, text="", font=FONTS["small"],
+                                             bg=C["mantle"], fg=C["overlay0"])
+        self._search_count_label.pack(side="left", padx=4)
+        tk.Button(search_inner, text="Prev", font=FONTS["shortcut"],
+                  bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
+                  command=self._search_prev).pack(side="left", padx=1)
+        tk.Button(search_inner, text="Next", font=FONTS["shortcut"],
+                  bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
+                  command=self._search_next).pack(side="left", padx=1)
+        tk.Button(search_inner, text="X", font=FONTS["shortcut"],
+                  bg=C["surface0"], fg=C["text"], relief="flat", padx=4,
+                  command=self._toggle_search).pack(side="left", padx=1)
+
         self._log = scrolledtext.ScrolledText(
             parent, bg=C["crust"], fg=C["text"],
-            font=("Consolas", 11), relief="flat", bd=8, wrap="word"
+            font=FONTS["log"], relief="flat", bd=8, wrap="word",
+            spacing1=2, spacing3=2
         )
         self._log.pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -1093,34 +1422,68 @@ class BatchRunnerGUI(tk.Tk):
                         ("SYS",   C["blue"]),   ("TIME",  C["overlay0"]),
                         ("DIM",   C["subtext"])]:
             self._log.tag_config(tag, foreground=fg)
+        # Phase 4: 추가 태그
+        self._log.tag_config("STAGE_HEADER", foreground=C["blue"],
+                             font=(FONT_MONO, 10, "bold"),
+                             background=C["surface0"], spacing1=6, spacing3=4)
+        self._log.tag_config("STAGE_DONE", foreground=C["green"],
+                             font=(FONT_MONO, 10, "bold"))
+        self._log.tag_config("HIGHLIGHT", background=C["yellow"], foreground=C["crust"])
 
     # ── 하단 버튼 바 ─────────────────────────────────────────
     def _build_button_bar(self):
         bar = tk.Frame(self, bg=C["crust"], pady=8)
         bar.pack(fill="x", padx=10, pady=(4, 8))
 
-        self._run_btn = tk.Button(
-            bar, text="▶  Run", font=("맑은 고딕", 11, "bold"),
-            bg=C["green"], fg=C["crust"], relief="flat", padx=20, pady=6,
-            activebackground=C["teal"], activeforeground=C["crust"],
-            command=self._on_run
+        def _make_run_cmd(mode):
+            def _cmd():
+                self.mode_var.set(mode)
+                self._on_run()
+            return _cmd
+
+        self._dryrun_btn = tk.Button(
+            bar, text="Dryrun", font=FONTS["button"],
+            bg=C["yellow"], fg=C["crust"], relief="flat", padx=14, pady=6,
+            activebackground=C["peach"], activeforeground=C["crust"],
+            command=_make_run_cmd("plan")
         )
-        self._run_btn.pack(side="left", padx=(0, 8))
+        self._dryrun_btn.pack(side="left", padx=(0, 4))
+
+        self._run_btn = tk.Button(
+            bar, text="▶  Run", font=FONTS["button"],
+            bg=C["blue"], fg=C["crust"], relief="flat", padx=14, pady=6,
+            activebackground=C["sky"], activeforeground=C["crust"],
+            command=_make_run_cmd("run")
+        )
+        self._run_btn.pack(side="left", padx=(0, 4))
+
+        self._retry_btn = tk.Button(
+            bar, text="Retry", font=FONTS["button"],
+            bg=C["peach"], fg=C["crust"], relief="flat", padx=14, pady=6,
+            activebackground=C["yellow"], activeforeground=C["crust"],
+            command=_make_run_cmd("retry")
+        )
+        self._retry_btn.pack(side="left", padx=(0, 4))
 
         self._stop_btn = tk.Button(
-            bar, text="■  Stop", font=("맑은 고딕", 11, "bold"),
-            bg=C["surface0"], fg=C["overlay0"], relief="flat", padx=20, pady=6,
+            bar, text="■  Stop", font=FONTS["button"],
+            bg=C["surface0"], fg=C["overlay0"], relief="flat", padx=14, pady=6,
             state="disabled", command=self._on_stop
         )
         self._stop_btn.pack(side="left")
 
+        self._stage_status = tk.Label(bar, text="", font=FONTS["small"],
+                                      bg=C["crust"], fg=C["overlay0"])
+        self._stage_status.pack(side="left", padx=10)
+
         # 단축키 힌트
-        for hint in [("F5", "Run"), ("Esc", "Stop"), ("Ctrl+S", "Save"), ("Ctrl+R", "Reload")]:
-            tk.Label(bar, text=f"{hint[0]} {hint[1]}", font=("Consolas", 7),
+        for hint in [("Ctrl+F5", "Dryrun"), ("F5", "Run"), ("Esc", "Stop"),
+                      ("Ctrl+S", "Save"), ("Ctrl+R", "Reload"), ("Ctrl+F", "Search")]:
+            tk.Label(bar, text=f"{hint[0]} {hint[1]}", font=FONTS["shortcut"],
                      bg=C["crust"], fg=C["overlay0"]).pack(side="left", padx=6)
 
         tk.Label(bar, text=f"Python {sys.version.split()[0]}",
-                 bg=C["crust"], fg=C["overlay0"], font=("Consolas", 9)
+                 bg=C["crust"], fg=C["overlay0"], font=FONTS["mono_small"]
                  ).pack(side="right", padx=10)
 
     # ── 현재 설정 스냅샷 ────────────────────────────────────────
@@ -1130,65 +1493,81 @@ class BatchRunnerGUI(tk.Tk):
             "job":         self.job_var.get(),
             "mode":        self.mode_var.get(),
             "env_path":    self._env_path_var.get(),
-            "host":        self._host_listbox.get(self._host_listbox.curselection()[0]) if self._host_listbox.curselection() else "",
+            "source_type": self._source_type_var.get(),
+            "source_host": self._source_host_var.get(),
+            "target_type": self._target_type_var.get(),
+            "target_db_path": self._target_db_path.get(),
+            "target_schema":  self._target_schema.get(),
+            "export_sql_dir": self._export_sql_dir.get(),
+            "export_out_dir": self._export_out_dir.get(),
+            "transform_sql_dir": self._transform_sql_dir.get(),
+            "report_sql_dir":    self._report_sql_dir.get(),
+            "report_out_dir":    self._report_out_dir.get(),
+            "stage_export":     self._stage_export.get(),
+            "stage_load_local": self._stage_load_local.get(),
+            "stage_transform":  self._stage_transform.get(),
+            "stage_report":     self._stage_report.get(),
             "params":      [(k.get(), v.get()) for k, v in self._param_entries],
-            "stages":      [s for s, v in self._stage_vars.items() if v.get()],
             "overrides": {
                 "overwrite":    self._ov_overwrite.get(),
                 "workers":      self._ov_workers.get(),
                 "compression":  self._ov_compression.get(),
-                "out_dir":      self._ov_out_dir.get(),
-                "db_path":      self._ov_db_path.get(),
-                "schema":       self._ov_schema.get(),
                 "on_error":     self._ov_on_error.get(),
                 "excel":        self._ov_excel.get(),
                 "csv":          self._ov_csv.get(),
                 "max_files":    self._ov_max_files.get(),
                 "skip_sql":     self._ov_skip_sql.get(),
                 "union_dir":    self._ov_union_dir.get(),
-                "sql_dir":      self._ov_sql_dir.get(),
+                "timeout":      self._ov_timeout.get(),
             },
         }
 
     def _restore_snapshot(self, snap: dict):
         """스냅샷으로 GUI 설정 복원"""
-        job = snap.get("job", "")
-        if job in self._jobs:
-            self.job_var.set(job)
-            self._on_job_change()
+        self._source_type_var.set(snap.get("source_type", "oracle"))
+        if hasattr(self, "_source_type_combo"):
+            self._on_source_type_change()
+        self._source_host_var.set(snap.get("source_host", ""))
+
+        self._target_type_var.set(snap.get("target_type", "duckdb"))
+        self._target_db_path.set(snap.get("target_db_path", "data/local/result.duckdb"))
+        self._target_schema.set(snap.get("target_schema", ""))
+        if hasattr(self, "_db_path_row"):
+            self._update_target_visibility()
+
+        self._export_sql_dir.set(snap.get("export_sql_dir", "sql/export"))
+        self._export_out_dir.set(snap.get("export_out_dir", "data/export"))
+        self._transform_sql_dir.set(snap.get("transform_sql_dir", "sql/transform/duckdb"))
+        self._report_sql_dir.set(snap.get("report_sql_dir", "sql/report"))
+        self._report_out_dir.set(snap.get("report_out_dir", "data/report"))
+
+        self._stage_export.set(snap.get("stage_export", True))
+        self._stage_load_local.set(snap.get("stage_load_local", True))
+        self._stage_transform.set(snap.get("stage_transform", True))
+        self._stage_report.set(snap.get("stage_report", True))
+        if self._stage_buttons:
+            self._refresh_stage_buttons()
+
+        self._refresh_param_rows(snap.get("params", []))
 
         self.mode_var.set(snap.get("mode", "run"))
         self._env_path_var.set(snap.get("env_path", "config/env.yml"))
 
-        host = snap.get("host", "")
-        if host:
-            hosts = list(self._host_listbox.get(0, "end"))
-            if host in hosts:
-                idx = hosts.index(host)
-                self._host_listbox.selection_clear(0, "end")
-                self._host_listbox.selection_set(idx)
-                self._host_listbox.see(idx)
-
-        self._refresh_param_rows(snap.get("params", []))
-
-        for stage, var in self._stage_vars.items():
-            saved = snap.get("stages", [])
-            var.set(stage in saved if saved else True)
+        job = snap.get("job", "")
+        if job and job in self._jobs:
+            self.job_var.set(job)
 
         ov = snap.get("overrides", {})
         self._ov_overwrite.set(ov.get("overwrite", False))
         self._ov_workers.set(ov.get("workers", 1))
         self._ov_compression.set(ov.get("compression", "gzip"))
-        self._ov_out_dir.set(ov.get("out_dir", ""))
-        self._ov_db_path.set(ov.get("db_path", ""))
-        self._ov_schema.set(ov.get("schema", ""))
         self._ov_on_error.set(ov.get("on_error", "stop"))
         self._ov_excel.set(ov.get("excel", True))
         self._ov_csv.set(ov.get("csv", True))
         self._ov_max_files.set(ov.get("max_files", 10))
         self._ov_skip_sql.set(ov.get("skip_sql", False))
         self._ov_union_dir.set(ov.get("union_dir", ""))
-        self._ov_sql_dir.set(ov.get("sql_dir", ""))
+        self._ov_timeout.set(ov.get("timeout", "1800"))
 
         self._refresh_preview()
 
@@ -1211,44 +1590,62 @@ class BatchRunnerGUI(tk.Tk):
         if self._preset_var.get() not in names:
             self._preset_var.set(names[0] if names else "")
 
-    def _build_new_cfg(self):
-        """현재 UI 상태를 base_cfg에 override 적용한 새 dict 반환"""
-        import copy
-        fname = self.job_var.get()
-        base_cfg = self._jobs.get(fname, {})
-        new_cfg = copy.deepcopy(base_cfg)
-        exp = new_cfg.setdefault("export", {})
-        tgt = new_cfg.setdefault("target", {})
-        tfm = new_cfg.setdefault("transform", {})
-        rep = new_cfg.setdefault("report", {})
-        exp["overwrite"]        = self._ov_overwrite.get()
-        if self._ov_sql_dir.get().strip():
-            exp["sql_dir"]      = self._ov_sql_dir.get().strip()
-        exp["parallel_workers"] = self._ov_workers.get()
-        exp["compression"]      = self._ov_compression.get()
-        if self._ov_out_dir.get().strip():
-            exp["out_dir"]      = self._ov_out_dir.get().strip()
-        if self._ov_db_path.get().strip():
-            tgt["db_path"]      = self._ov_db_path.get().strip()
-        if self._ov_schema.get().strip():
-            tgt["schema"]       = self._ov_schema.get().strip()
-        tfm["on_error"]         = self._ov_on_error.get()
-        rep.setdefault("excel", {})["enabled"]      = self._ov_excel.get()
-        rep.setdefault("excel", {})["max_files"]    = self._ov_max_files.get()
-        rep.setdefault("export_csv", {})["enabled"] = self._ov_csv.get()
-        rep["skip_sql"] = self._ov_skip_sql.get()
-        if self._ov_union_dir.get().strip():
-            rep["csv_union_dir"] = self._ov_union_dir.get().strip()
-        sel = self._host_listbox.curselection()
-        selected_host = self._host_listbox.get(sel[0]).strip() if sel else ""
-        yml_host = (base_cfg.get("source", {}).get("host", "") or "")
-        if selected_host and selected_host != yml_host:
-            new_cfg.setdefault("source", {})["host"] = selected_host
+    def _build_gui_config(self) -> dict:
+        """GUI 전체 상태를 job yml dict로 조립"""
+        stages = [s for s in ("export", "load_local", "transform", "report")
+                  if getattr(self, f"_stage_{s}").get()]
         params = {k.get().strip(): v.get().strip()
-                  for k, v in self._param_entries if k.get().strip()}
+                  for k, v in self._param_entries if k.get().strip() and v.get().strip()}
+
+        cfg = {
+            "job_name": self._jobs.get(self.job_var.get(), {}).get("job_name", "gui_run"),
+            "pipeline": {"stages": stages},
+            "source": {
+                "type": self._source_type_var.get(),
+                "host": self._source_host_var.get(),
+            },
+            "export": {
+                "sql_dir": self._export_sql_dir.get(),
+                "out_dir": self._export_out_dir.get(),
+                "overwrite": self._ov_overwrite.get(),
+                "parallel_workers": self._ov_workers.get(),
+                "compression": self._ov_compression.get(),
+                "format": "csv",
+            },
+            "target": {
+                "type": self._target_type_var.get(),
+            },
+            "transform": {
+                "sql_dir": self._transform_sql_dir.get(),
+                "on_error": self._ov_on_error.get(),
+            },
+            "report": {
+                "source": "target",
+                "export_csv": {
+                    "enabled": self._ov_csv.get(),
+                    "sql_dir": self._report_sql_dir.get(),
+                    "out_dir": self._report_out_dir.get(),
+                },
+                "excel": {
+                    "enabled": self._ov_excel.get(),
+                    "out_dir": self._report_out_dir.get(),
+                    "max_files": self._ov_max_files.get(),
+                },
+            },
+        }
         if params:
-            new_cfg["params"] = params
-        return new_cfg
+            cfg["params"] = params
+        # target specifics
+        tgt_type = self._target_type_var.get()
+        if tgt_type in ("duckdb", "sqlite3") and self._target_db_path.get().strip():
+            cfg["target"]["db_path"] = self._target_db_path.get().strip()
+        if tgt_type == "oracle" and self._target_schema.get().strip():
+            cfg["target"]["schema"] = self._target_schema.get().strip()
+        if self._ov_skip_sql.get():
+            cfg["report"]["skip_sql"] = True
+        if self._ov_union_dir.get().strip():
+            cfg["report"]["csv_union_dir"] = self._ov_union_dir.get().strip()
+        return cfg
 
     def _save_yml_dialog(self, suggest: str, title: str = "Save as yml"):
         """jobs/<name>.yml 저장 공통 다이얼로그. 저장 후 reload + 선택."""
@@ -1259,10 +1656,10 @@ class BatchRunnerGUI(tk.Tk):
         dlg.transient(self)
         dlg.grab_set()
         dlg.resizable(False, False)
-        tk.Label(dlg, text="Job filename (.yml)", font=("Consolas", 10),
+        tk.Label(dlg, text="Job filename (.yml)", font=FONTS["mono"],
                  bg=C["base"], fg=C["text"]).pack(pady=(18, 6))
         name_var = tk.StringVar(value=suggest)
-        entry = tk.Entry(dlg, textvariable=name_var, font=("Consolas", 10),
+        entry = tk.Entry(dlg, textvariable=name_var, font=FONTS["mono"],
                          bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
                          relief="flat", width=30)
         entry.pack()
@@ -1282,7 +1679,7 @@ class BatchRunnerGUI(tk.Tk):
                 if not messagebox.askyesno("Overwrite", f"{raw} already exists. Overwrite?",
                                            parent=dlg):
                     return
-            new_cfg = self._build_new_cfg()
+            new_cfg = self._build_gui_config()
             out_path.write_text(
                 yaml.dump(new_cfg, allow_unicode=True, default_flow_style=False,
                           sort_keys=False),
@@ -1295,7 +1692,7 @@ class BatchRunnerGUI(tk.Tk):
             dlg.destroy()
 
         entry.bind("<Return>", do_save)
-        tk.Button(dlg, text="💾  Save", font=("Consolas", 10, "bold"),
+        tk.Button(dlg, text="💾  Save", font=FONTS["body_bold"],
                   bg=C["green"], fg=C["crust"], relief="flat", padx=16, pady=4,
                   activebackground=C["teal"],
                   command=do_save).pack(pady=10)
@@ -1333,10 +1730,10 @@ class BatchRunnerGUI(tk.Tk):
     # ── yml로 저장 ───────────────────────────────────────────────
     def _on_save_yml(self):
         fname = self.job_var.get()
-        if not fname or fname not in self._jobs:
-            messagebox.showwarning("Notice", "Please select a job first.")
-            return
-        suggest = fname.replace(".yml", "") + "_custom"
+        if fname:
+            suggest = fname.replace(".yml", "") + "_custom"
+        else:
+            suggest = "new_job"
         self._save_yml_dialog(suggest, "Save as yml")
 
     # ── 프로젝트 로드 ────────────────────────────────────────
@@ -1349,9 +1746,17 @@ class BatchRunnerGUI(tk.Tk):
         job_names = list(self._jobs.keys())
         if hasattr(self, "_job_combo"):
             self._job_combo["values"] = job_names
-            # 이미 선택된 job이 있으면 유지, 없으면 빈 상태 (자동 선택 안 함)
             if self.job_var.get() in job_names:
                 self._on_job_change()
+
+        # source type combo 갱신
+        if hasattr(self, "_source_type_combo"):
+            src_types = list(self._env_hosts.keys())
+            if src_types:
+                self._source_type_combo["values"] = src_types
+                if self._source_type_var.get() not in src_types:
+                    self._source_type_var.set(src_types[0])
+                self._on_source_type_change()
 
         self._log_sys(f"Project loaded: {wd}  (jobs={len(self._jobs)}, "
                       f"env hosts={sum(len(v) for v in self._env_hosts.values())})")
@@ -1362,70 +1767,65 @@ class BatchRunnerGUI(tk.Tk):
             self._work_dir.set(d)
             self._reload_project()
 
-    # ── Job 선택 시 ──────────────────────────────────────────
+    # ── Job 선택 시 → 모든 1급 필드 자동 채움 ────────────────
     def _on_job_change(self, *_):
         fname = self.job_var.get()
         cfg = self._jobs.get(fname, {})
         if not cfg:
             return
 
-        # 요약 표시
-        stages = cfg.get("pipeline", {}).get("stages", [])
-        src_type = cfg.get("source", {}).get("type", "?")
-        src_host = cfg.get("source", {}).get("host", "")
-        tgt_type = cfg.get("target", {}).get("type", "?")
-        # host listbox 갱신
-        hosts = self._env_hosts.get(src_type, [])
-        if src_host and src_host not in hosts:
-            hosts = [src_host] + hosts
-        self._host_listbox.delete(0, "end")
-        for h in hosts:
-            self._host_listbox.insert("end", h)
-        # 기본 host 선택
-        if hosts:
-            default = src_host or hosts[0]
-            idx = hosts.index(default) if default in hosts else 0
-            self._host_listbox.selection_set(idx)
-            self._host_listbox.see(idx)
+        # Source
+        src = cfg.get("source", {})
+        src_type = src.get("type", "oracle")
+        self._source_type_var.set(src_type)
+        self._on_source_type_change()
+        src_host = src.get("host", "")
+        if src_host:
+            self._source_host_var.set(src_host)
 
-        # params 갱신 + SQL 파라미터 자동 감지
-        params = cfg.get("params", {})
-        self._refresh_param_rows(list(params.items()))
-        # sql_dir 스캔 (after() 로 약간 지연 — UI 빌드 완료 후 실행)
-        self.after(50, self._scan_and_suggest_params)
-
-        # Pipeline 시각화 갱신
-        self._refresh_pipeline_ui(stages)
-
-        # Job Override 위젯 → yml 기본값으로 초기화
-        exp = cfg.get("export", {})
+        # Target
         tgt = cfg.get("target", {})
+        self._target_type_var.set(tgt.get("type", "duckdb"))
+        self._target_db_path.set(tgt.get("db_path", "data/local/result.duckdb"))
+        self._target_schema.set(tgt.get("schema", ""))
+        self._update_target_visibility()
+
+        # Export paths
+        exp = cfg.get("export", {})
+        self._export_sql_dir.set(exp.get("sql_dir", "sql/export"))
+        self._export_out_dir.set(exp.get("out_dir", "data/export"))
+
+        # Transform / Report paths
         tfm = cfg.get("transform", {})
+        self._transform_sql_dir.set(tfm.get("sql_dir", f"sql/transform/{tgt.get('type', 'duckdb')}"))
         rep = cfg.get("report", {})
+        rep_csv = rep.get("export_csv", {})
+        self._report_sql_dir.set(rep_csv.get("sql_dir", "sql/report"))
+        self._report_out_dir.set(rep_csv.get("out_dir", rep.get("excel", {}).get("out_dir", "data/report")))
+
+        # Stages
+        stages = cfg.get("pipeline", {}).get("stages", [])
+        self._stage_export.set("export" in stages)
+        self._stage_load_local.set("load_local" in stages)
+        self._stage_transform.set("transform" in stages)
+        self._stage_report.set("report" in stages)
+        self._refresh_stage_buttons()
+
+        # Advanced overrides
         self._ov_overwrite.set(bool(exp.get("overwrite", False)))
         self._ov_workers.set(int(exp.get("parallel_workers", 1)))
         self._ov_compression.set(str(exp.get("compression", "gzip")))
-        self._ov_out_dir.set("")
-        self._ov_db_path.set("")
-        self._ov_schema.set("")
         self._ov_on_error.set(str(tfm.get("on_error", "stop")))
         self._ov_excel.set(bool(rep.get("excel", {}).get("enabled", True)))
-        self._ov_csv.set(bool(rep.get("export_csv", {}).get("enabled", True)))
+        self._ov_csv.set(bool(rep_csv.get("enabled", True)))
         self._ov_max_files.set(int(rep.get("excel", {}).get("max_files", 10)))
         self._ov_skip_sql.set(bool(rep.get("skip_sql", False)))
         self._ov_union_dir.set("")
-        self._ov_sql_dir.set("")
 
-        # target 종류에 따라 행 show/hide
-        if tgt_type in ("duckdb", "sqlite3"):
-            self._ov_db_path_row.pack(fill="x", padx=12, pady=2)
-            self._ov_schema_row.pack_forget()
-        elif tgt_type == "oracle":
-            self._ov_schema_row.pack(fill="x", padx=12, pady=2)
-            self._ov_db_path_row.pack_forget()
-        else:
-            self._ov_db_path_row.pack_forget()
-            self._ov_schema_row.pack_forget()
+        # Params
+        params = cfg.get("params", {})
+        self._refresh_param_rows(list(params.items()))
+        self.after(50, self._scan_and_suggest_params)
 
         # SQL 선택 초기화
         self._selected_sqls = set()
@@ -1436,130 +1836,120 @@ class BatchRunnerGUI(tk.Tk):
     # ── SQL 파라미터 자동 감지 ─────────────────────────────────
     def _scan_and_suggest_params(self):
         """
-        현재 sql_dir (override 또는 yml 기본값) 을 스캔해서
-        발견된 파라미터를 Params 섹션에 자동 제시.
-        - sql_dir override 있으면: 해당 dir 파라미터만 사용 (yml 기본 params는 값만 참조)
-        - sql_dir override 없으면: yml params + 스캔 결과 병합
-        - 이미 사용자가 입력한 값은 항상 유지
+        현재 export.sql_dir 을 스캔해서 발견된 파라미터를 Params 섹션에 자동 제시.
+        이미 사용자가 입력한 값은 항상 유지.
         """
-        fname = self.job_var.get()
-        if not fname:
-            return
-        cfg = self._jobs.get(fname, {})
         wd = Path(self._work_dir.get())
-
-        # sql_dir 결정: override > yml > 기본
-        sql_dir_override = self._ov_sql_dir.get().strip()
-        sql_dir_yml = cfg.get("export", {}).get("sql_dir", "sql/export")
-        sql_dir_rel = sql_dir_override or sql_dir_yml
+        sql_dir_rel = self._export_sql_dir.get().strip()
+        if not sql_dir_rel:
+            return
         sql_dir = Path(sql_dir_rel) if Path(sql_dir_rel).is_absolute() else wd / sql_dir_rel
 
-        # sql filter 선택 있으면 해당 파일만 스캔
+        # sql filter 선택 있으면 해당 파일만 스캔 (sql_dir 기준 상대경로)
         if self._selected_sqls:
-            sel_files = [wd / p for p in self._selected_sqls if (wd / p).exists()]
+            sel_files = [sql_dir / p for p in self._selected_sqls if (sql_dir / p).exists()]
             detected = _scan_params_from_files(sel_files)
         else:
             detected = scan_sql_params(sql_dir)
 
-        # 현재 params 딕셔너리 (사용자 입력값)
+        # 현재 params (사용자 입력값)
         current = {k.get(): v.get() for k, v in self._param_entries if k.get()}
 
-        # yml 기본값
-        yml_params = cfg.get("params", {})
+        # yml 기본값 (job 선택 시 참조)
+        fname = self.job_var.get()
+        yml_params = self._jobs.get(fname, {}).get("params", {}) if fname else {}
 
-        if sql_dir_override and sql_dir_override != sql_dir_yml:
-            # sql_dir override 케이스:
-            # detected 파라미터만 표시 (미사용 yml 파라미터는 추가 안 함)
-            # yml에 기본값이 있으면 값 참조, 사용자 입력값 우선
-            merged = {}
-            for p in detected:
-                if p in current:
-                    merged[p] = current[p]
-                elif p in yml_params:
-                    merged[p] = str(yml_params[p])
-                else:
-                    merged[p] = ""
-            # # 사용자가 직접 추가한 값 (detected에 없어도 유지)
-            # for k, v in current.items():
-            #     if k not in merged and v:  # 값이 있는 것만 유지
-            #         merged[k] = v
-        else:
-            # 기본 케이스: yml params + detected 병합
-            merged = {}
-            for p in detected:
-                if p in current:
-                    merged[p] = current[p]
-                elif p in yml_params:
-                    merged[p] = str(yml_params[p])
-                else:
-                    merged[p] = ""
-            # 사용자가 직접 추가한 값은 항상 유지
-            for k, v in current.items():
-                if k not in merged:
-                    merged[k] = v
+        merged = {}
+        for p in detected:
+            if p in current:
+                merged[p] = current[p]
+            elif p in yml_params:
+                merged[p] = str(yml_params[p])
+            else:
+                merged[p] = ""
+        # 사용자가 직접 추가한 값은 항상 유지
+        for k, v in current.items():
+            if k not in merged:
+                merged[k] = v
 
         self._refresh_param_rows(list(merged.items()))
-        if detected:
+        if detected and set(detected) != getattr(self, "_last_detected_params", set()):
+            self._last_detected_params = set(detected)
             self._log_sys(f"SQL params detected: {', '.join(detected)}")
 
-    # ── Pipeline 시각화 UI ──────────────────────────────────
-    def _refresh_pipeline_ui(self, stages):
-        for w in self._pipeline_frame.winfo_children():
-            w.destroy()
-        self._stage_vars = {}
-        self._pipeline_widgets = []
+    # ── Source Type 변경 핸들러 ──────────────────────────────
+    def _on_source_type_change(self, *_):
+        src_type = self._source_type_var.get()
+        hosts = self._env_hosts.get(src_type, [])
+        if hasattr(self, "_host_combo"):
+            self._host_combo["values"] = hosts
+        if hosts:
+            self._source_host_var.set(hosts[0])
+        else:
+            self._source_host_var.set("")
+        self._refresh_preview()
 
-        STAGE_DISPLAY = {
-            "export":     ("Export",    C["blue"]),
-            "load_local": ("Load",      C["teal"]),
-            "transform":  ("Transform", C["mauve"]),
-            "report":     ("Report",    C["peach"]),
-        }
+    # ── Target Type 변경 핸들러 ──────────────────────────────
+    def _on_target_type_change(self, *_):
+        tgt = self._target_type_var.get()
+        self._transform_sql_dir.set(f"sql/transform/{tgt}")
+        self._update_target_visibility()
+        self._refresh_preview()
 
-        # 헤더: "Stages" + 전체선택/해제 버튼
-        hdr = tk.Frame(self._pipeline_frame, bg=C["mantle"])
-        hdr.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
-        tk.Label(hdr, text="Stages", font=("Consolas", 8, "bold"),
-                 bg=C["mantle"], fg=C["blue"]).pack(side="left")
+    def _update_target_visibility(self):
+        tgt = self._target_type_var.get()
+        if not hasattr(self, "_db_path_row"):
+            return
+        if tgt in ("duckdb", "sqlite3"):
+            self._db_path_row.pack(fill="x", padx=12, pady=2)
+            self._schema_row.pack_forget()
+            self._oracle_hint_row.pack_forget()
+        elif tgt == "oracle":
+            self._db_path_row.pack_forget()
+            self._schema_row.pack(fill="x", padx=12, pady=2)
+            self._oracle_hint_row.pack(fill="x", padx=12)
+        else:
+            self._db_path_row.pack_forget()
+            self._schema_row.pack_forget()
+            self._oracle_hint_row.pack_forget()
 
-        def _select_all():
-            for _, v, _ in self._pipeline_widgets:
-                v.set(True)
-            self._refresh_preview()
+    # ── Export sql_dir 변경 → auto-suggest ────────────────────
+    def _on_export_sql_dir_change(self):
+        sql_dir = self._export_sql_dir.get()
+        if sql_dir:
+            suggested = sql_dir.replace("sql/", "data/", 1)
+            if suggested != sql_dir:
+                self._export_out_dir.set(suggested)
+        self._scan_and_suggest_params()
 
-        def _deselect_all():
-            for _, v, _ in self._pipeline_widgets:
-                v.set(False)
-            self._refresh_preview()
+    # ── Stage 토글 버튼 ──────────────────────────────────────
+    def _toggle_stage(self, stage_key):
+        var = getattr(self, f"_stage_{stage_key}")
+        var.set(not var.get())
+        self._refresh_stage_buttons()
+        self._refresh_preview()
 
-        for txt, cmd in [("all", _select_all), ("none", _deselect_all)]:
-            tk.Button(hdr, text=txt, font=("Consolas", 7),
-                      bg=C["surface0"], fg=C["subtext"], relief="flat",
-                      padx=5, pady=0, activebackground=C["surface1"],
-                      command=cmd).pack(side="left", padx=(6, 0))
+    def _refresh_stage_buttons(self):
+        for stage_key, (btn, color_key) in self._stage_buttons.items():
+            var = getattr(self, f"_stage_{stage_key}")
+            if var.get():
+                btn.config(bg=C[color_key], fg=C["crust"],
+                           activebackground=C[color_key], activeforeground=C["crust"])
+            else:
+                btn.config(bg=C["surface0"], fg=C["overlay0"],
+                           activebackground=C["surface1"], activeforeground=C["overlay0"])
 
-        # 2×2 그리드 — yml stages 순서대로, 초기값 모두 True (yml에 있으면 켜짐)
-        positions = [(0, 1), (1, 1), (0, 2), (1, 2)]
-        for idx, stage in enumerate(stages[:4]):
-            display, color = STAGE_DISPLAY.get(stage, (stage, C["text"]))
-            var = tk.BooleanVar(value=True)   # yml에 있는 stage는 기본 ON
-            self._stage_vars[stage] = var
-            col, row = positions[idx]
-            cb = tk.Checkbutton(
-                self._pipeline_frame, text=display, variable=var,
-                font=("Consolas", 9),
-                bg=C["mantle"], fg=color,
-                selectcolor=C["surface0"],
-                activebackground=C["mantle"], activeforeground=color,
-                anchor="w",
-                command=lambda: self._refresh_preview()
-            )
-            cb.grid(row=row, column=col, sticky="w",
-                    padx=(4 if col == 0 else 14, 4), pady=1)
-            self._pipeline_widgets.append((cb, var, color))
+    def _stages_all(self):
+        for s, _, _ in STAGE_CONFIG:
+            getattr(self, f"_stage_{s}").set(True)
+        self._refresh_stage_buttons()
+        self._refresh_preview()
 
-    def _refresh_pipeline_buttons(self):
-        pass
+    def _stages_none(self):
+        for s, _, _ in STAGE_CONFIG:
+            getattr(self, f"_stage_{s}").set(False)
+        self._refresh_stage_buttons()
+        self._refresh_preview()
 
     # ── Param 행 관리 ────────────────────────────────────────
     def _refresh_param_rows(self, pairs: list):
@@ -1580,56 +1970,47 @@ class BatchRunnerGUI(tk.Tk):
         row.pack(fill="x", pady=1)
 
         tk.Entry(row, textvariable=k_var, bg=C["surface0"], fg=C["text"],
-                 insertbackground=C["text"], relief="flat", font=("Consolas", 9),
-                 width=10).pack(side="left", padx=(0, 2))
+                 insertbackground=C["text"], relief="flat", font=FONTS["mono"],
+                 width=10).pack(side="left", padx=(0, 2), ipady=2)
         tk.Label(row, text="=", bg=C["mantle"], fg=C["overlay0"],
-                 font=("Consolas", 9)).pack(side="left")
+                 font=FONTS["mono"]).pack(side="left")
         tk.Entry(row, textvariable=v_var, bg=C["surface0"], fg=C["text"],
-                 insertbackground=C["text"], relief="flat", font=("Consolas", 9),
-                 width=14).pack(side="left", padx=(2, 0), fill="x", expand=True)
+                 insertbackground=C["text"], relief="flat", font=FONTS["mono"],
+                 width=14).pack(side="left", padx=(2, 0), fill="x", expand=True, ipady=2)
 
         def remove(r=row, pair=(k_var, v_var)):
             r.destroy()
             if pair in self._param_entries:
                 self._param_entries.remove(pair)
             self._refresh_preview()
-        tk.Button(row, text="✕", font=("Consolas", 8), bg=C["mantle"],
+        tk.Button(row, text="X", font=FONTS["shortcut"], bg=C["mantle"],
                   fg=C["overlay0"], relief="flat", padx=4,
                   command=remove).pack(side="right")
 
     # ── SQL 선택 ─────────────────────────────────────────────
     def _open_sql_selector(self):
-        fname = self.job_var.get()
-        cfg = self._jobs.get(fname, {})
-        # 초기 디렉토리: job의 sql_dir 기준, 없으면 workdir
-        sql_dir_rel = cfg.get("export", {}).get("sql_dir", "sql/export")
-        init_dir = Path(self._work_dir.get()) / sql_dir_rel
-        if not init_dir.exists():
-            init_dir = Path(self._work_dir.get())
-
-        files = filedialog.askopenfilenames(
-            title="Select SQL files (multi-select)",
-            initialdir=str(init_dir),
-            filetypes=[("SQL files", "*.sql"), ("All files", "*.*")],
-            parent=self,
-        )
-        if not files:
+        sql_dir_rel = self._export_sql_dir.get() or "sql/export"
+        wd = Path(self._work_dir.get())
+        sql_dir = wd / sql_dir_rel
+        if not sql_dir.exists():
+            messagebox.showwarning("SQL Filter",
+                                   f"export.sql_dir 경로가 존재하지 않습니다:\n{sql_dir}",
+                                   parent=self)
             return
 
-        wd = Path(self._work_dir.get())
-        new_selected = set()
-        for f in files:
-            p = Path(f)
-            try:
-                # workdir 기준 상대경로로 변환
-                rel = p.relative_to(wd).as_posix()
-            except ValueError:
-                # workdir 밖이면 절대경로 사용
-                rel = str(p)
-            new_selected.add(rel)
+        # 현재 선택 상태를 sql_dir 기준 상대경로로 변환하여 전달
+        pre = set()
+        for rel in self._selected_sqls:
+            # _selected_sqls는 sql_dir 기준 상대경로로 저장됨
+            pre.add(rel)
 
-        self._selected_sqls = new_selected
+        dlg = SqlSelectorDialog(self, sql_dir, pre_selected=pre)
+        self.wait_window(dlg)
+
+        # 결과 반영 (sql_dir 기준 상대경로)
+        self._selected_sqls = set(dlg.selected)
         self._update_sql_preview()
+        self._scan_and_suggest_params()
         self._refresh_preview()
 
     def _update_sql_preview(self):
@@ -1650,162 +2031,60 @@ class BatchRunnerGUI(tk.Tk):
 
     # ── Command 빌드 & 미리보기 ──────────────────────────────
     def _build_command(self) -> list[str]:
-        # 실행은 cwd=workdir 로 하므로 상대경로만 사용
+        """GUI 상태 전체를 임시 yml로 생성 후 runner.py에 전달"""
         cmd = ["python", "runner.py"]
 
-        fname = self.job_var.get()
-        if fname:
-            cmd += ["--job", fname]
+        # 임시 yml 생성
+        cfg = self._build_gui_config()
+        wd = Path(self._work_dir.get())
+        jobs_dir = wd / "jobs"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = jobs_dir / "_gui_temp.yml"
+        temp_path.write_text(
+            yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8"
+        )
+        cmd += ["--job", "_gui_temp.yml"]
 
+        # env
         env_path = self._env_path_var.get().strip()
         if env_path and env_path != "config/env.yml":
             cmd += ["--env", env_path]
 
+        # mode
         mode = self.mode_var.get()
         if mode != "run":
             cmd += ["--mode", mode]
 
+        # debug
         if self._debug_var.get():
             cmd.append("--debug")
 
-        # for k_var, v_var in self._param_entries:
-        #     k, v = k_var.get().strip(), v_var.get().strip()
-        #     if k and v:
-        #         cmd += ["--param", f"{k}={v}"]
-        
-        # 수정
-        # sql_dir override 시: 실제 해당 폴더 SQL에 등장하는 파라미터만 전달
-        _sql_dir_override = self._ov_sql_dir.get().strip()
-        _yml_sql_dir = (self._jobs.get(self.job_var.get(), {})
-                        .get("export", {}).get("sql_dir", "sql/export"))
+        # params (yml에도 있지만 CLI 전달도 유지)
+        for k_var, v_var in self._param_entries:
+            k, v = k_var.get().strip(), v_var.get().strip()
+            if k and v:
+                cmd += ["--param", f"{k}={v}"]
 
-        if _sql_dir_override and _sql_dir_override != _yml_sql_dir:
-            # 해당 sql_dir에서 실제 사용되는 파라미터 목록
-            _wd = Path(self._work_dir.get())
-            _sd = Path(_sql_dir_override) if Path(_sql_dir_override).is_absolute() else _wd / _sql_dir_override
-            if self._selected_sqls:
-                _active_params = set(_scan_params_from_files([_wd / p for p in self._selected_sqls if (_wd / p).exists()]))
-            else:
-                _active_params = set(scan_sql_params(_sd))
-            for k_var, v_var in self._param_entries:
-                k, v = k_var.get().strip(), v_var.get().strip()
-                if k and v and k in _active_params:   # ← 실제 사용 파라미터만
-                    cmd += ["--param", f"{k}={v}"]
-        else:
-            for k_var, v_var in self._param_entries:
-                k, v = k_var.get().strip(), v_var.get().strip()
-                if k and v:
-                    cmd += ["--param", f"{k}={v}"]
-        
-
-        # ── Job Override → --set 자동 생성 ──────────────────────
-        fname2 = self.job_var.get()
-        cfg = self._jobs.get(fname2, {})
-        exp_cfg = cfg.get("export", {})
-        tgt_cfg = cfg.get("target", {})
-        tfm_cfg = cfg.get("transform", {})
-        rep_cfg = cfg.get("report", {})
-
-        # export.overwrite
-        ov_val = self._ov_overwrite.get()
-        if ov_val != bool(exp_cfg.get("overwrite", False)):
-            cmd += ["--set", f"export.overwrite={str(ov_val).lower()}"]
-
-        # export.parallel_workers
-        wk_val = self._ov_workers.get()
-        if wk_val != int(exp_cfg.get("parallel_workers", 1)):
-            cmd += ["--set", f"export.parallel_workers={wk_val}"]
-
-        # export.compression
-        cmp_val = self._ov_compression.get()
-        if cmp_val != str(exp_cfg.get("compression", "gzip")):
-            cmd += ["--set", f"export.compression={cmp_val}"]
-
-        # export.out_dir
-        out_val = self._ov_out_dir.get().strip()
-        if out_val:
-            cmd += ["--set", f"export.out_dir={out_val}"]
-
-        # target.db_path
-        db_val = self._ov_db_path.get().strip()
-        if db_val:
-            cmd += ["--set", f"target.db_path={db_val}"]
-
-        # target.schema
-        sc_val = self._ov_schema.get().strip()
-        if sc_val:
-            cmd += ["--set", f"target.schema={sc_val}"]
-
-        # transform.on_error
-        oe_val = self._ov_on_error.get()
-        if oe_val != str(tfm_cfg.get("on_error", "stop")):
-            cmd += ["--set", f"transform.on_error={oe_val}"]
-
-        # report.excel.enabled
-        ex_val = self._ov_excel.get()
-        if ex_val != bool(rep_cfg.get("excel", {}).get("enabled", True)):
-            cmd += ["--set", f"report.excel.enabled={str(ex_val).lower()}"]
-
-        # report.export_csv.enabled
-        cv_val = self._ov_csv.get()
-        if cv_val != bool(rep_cfg.get("export_csv", {}).get("enabled", True)):
-            cmd += ["--set", f"report.export_csv.enabled={str(cv_val).lower()}"]
-
-        # report.excel.max_files
-        mf_val = self._ov_max_files.get()
-        if mf_val != int(rep_cfg.get("excel", {}).get("max_files", 10)):
-            cmd += ["--set", f"report.excel.max_files={mf_val}"]
-
-        # export.sql_dir
-        sd_val = self._ov_sql_dir.get().strip()
-        fname_sd = self.job_var.get()
-        yml_sql_dir = (self._jobs.get(fname_sd, {}).get("export", {}).get("sql_dir", "") or "")
-        if sd_val and sd_val != yml_sql_dir:
-            cmd += ["--set", f"export.sql_dir={sd_val}"]
-
-        # report.skip_sql
-        ss_val = self._ov_skip_sql.get()
-        if ss_val != bool(rep_cfg.get("skip_sql", False)):
-            cmd += ["--set", f"report.skip_sql={str(ss_val).lower()}"]
-
-        # report.csv_union_dir
-        ud_val = self._ov_union_dir.get().strip()
-        if ud_val and ud_val != rep_cfg.get("csv_union_dir", ""):
-            cmd += ["--set", f"report.csv_union_dir={ud_val}"]
-
-        # Host override: listbox 선택값이 yml과 다를 때만 --set으로 전달
-        sel = self._host_listbox.curselection()
-        selected_host = self._host_listbox.get(sel[0]) if sel else ""
-        fname3 = self.job_var.get()
-        yml_host = (self._jobs.get(fname3, {}).get("source", {}).get("host", "") or "")
-        if selected_host and selected_host != yml_host:
-            cmd += ["--set", f"source.host={selected_host}"]
-
-        # pass selected stages via --stage (none selected = run all)
-        selected_stages = [s for s, v in self._stage_vars.items() if v.get()]
-        all_stages = list(self._stage_vars.keys())
-        # 전부 선택이거나 아무것도 없으면 --stage 생략 (전체 실행)
+        # stages (전부 선택이거나 아무것도 없으면 생략)
+        selected_stages = [s for s in ("export", "load_local", "transform", "report")
+                           if getattr(self, f"_stage_{s}").get()]
+        all_stages = ["export", "load_local", "transform", "report"]
         if selected_stages and selected_stages != all_stages:
             for stage in selected_stages:
                 cmd += ["--stage", stage]
 
-        # SQL 파일 선택 → --include 패턴
-        # workdir 기준 rel_path: "sql/export/mart/01_bigt.sql"
-        # sql_dir 기준으로 변환:  "mart/01_bigt"  (export_stage와 일치)
-        _sql_dir_rel = (self._ov_sql_dir.get().strip()
-                        or (self._jobs.get(self.job_var.get(), {})
-                            .get("export", {}).get("sql_dir", "sql/export")))
+        # SQL 파일 선택 → --include 패턴 (sql_dir 기준 상대경로)
         for rel_path in sorted(self._selected_sqls):
-            p = Path(rel_path)
-            try:
-                # sql_dir prefix 제거 후 확장자 제거
-                pattern = p.relative_to(Path(_sql_dir_rel)).with_suffix("").as_posix()
-            except ValueError:
-                # sql_dir 밖이면 stem만
-                pattern = p.stem
-            cmd += ["--include", str(pattern)]  # str 명시 (WindowsPath 방지)
+            pattern = Path(rel_path).with_suffix("").as_posix()
+            cmd += ["--include", str(pattern)]
 
-        return [str(x) for x in cmd]  # 전체 str 보장
+        # --timeout
+        timeout_val = self._ov_timeout.get().strip()
+        if timeout_val:
+            cmd += ["--timeout", timeout_val]
+
+        return [str(x) for x in cmd]
 
     def _refresh_preview(self):
         try:
@@ -1833,8 +2112,224 @@ class BatchRunnerGUI(tk.Tk):
     def _set_status(self, text, color):
         self._status_label.config(text=text, fg=color)
 
+    # ── 로그 검색 (Ctrl+F) ──────────────────────────────────
+    def _toggle_search(self):
+        if self._search_frame.winfo_viewable():
+            self._search_frame.pack_forget()
+            self._clear_search_highlights()
+        else:
+            self._search_frame.pack(fill="x", padx=8, pady=(0, 4), before=self._log)
+            self._search_entry.focus_set()
+
+    def _on_search_change(self, *_):
+        self._clear_search_highlights()
+        query = self._search_var.get()
+        if not query:
+            self._search_count_label.config(text="")
+            return
+        self._search_matches = []
+        start = "1.0"
+        while True:
+            pos = self._log.search(query, start, stopindex="end", nocase=True)
+            if not pos:
+                break
+            end = f"{pos}+{len(query)}c"
+            self._log.tag_add("HIGHLIGHT", pos, end)
+            self._search_matches.append(pos)
+            start = end
+        count = len(self._search_matches)
+        self._search_match_idx = 0
+        self._search_count_label.config(text=f"{count} found" if count else "not found")
+        if self._search_matches:
+            self._log.see(self._search_matches[0])
+
+    def _search_next(self):
+        if not self._search_matches:
+            return
+        self._search_match_idx = (self._search_match_idx + 1) % len(self._search_matches)
+        self._log.see(self._search_matches[self._search_match_idx])
+
+    def _search_prev(self):
+        if not self._search_matches:
+            return
+        self._search_match_idx = (self._search_match_idx - 1) % len(self._search_matches)
+        self._log.see(self._search_matches[self._search_match_idx])
+
+    def _clear_search_highlights(self):
+        self._log.tag_remove("HIGHLIGHT", "1.0", "end")
+        self._search_matches = []
+        self._search_match_idx = 0
+
+    # ── 좌측 패널 활성화/비활성화 ─────────────────────────────
+    def _set_left_panel_state(self, enabled: bool):
+        def _recurse(widget):
+            for child in widget.winfo_children():
+                try:
+                    if isinstance(child, ttk.Combobox):
+                        child.config(state="readonly" if enabled else "disabled")
+                    elif isinstance(child, (tk.Entry, tk.Spinbox, tk.Checkbutton,
+                                           tk.Radiobutton, tk.Button, tk.Listbox)):
+                        child.config(state="normal" if enabled else "disabled")
+                except Exception:
+                    pass
+                _recurse(child)
+        if hasattr(self, '_left_inner'):
+            _recurse(self._left_inner)
+
+    # ── Run 버튼 애니메이션 ───────────────────────────────────
+    def _animate_run_btn(self):
+        if self._process is None or self._process.poll() is not None:
+            return
+        self._anim_dots = (self._anim_dots % 3) + 1
+        mode = self.mode_var.get()
+        btn = {"plan": self._dryrun_btn, "retry": self._retry_btn}.get(mode, self._run_btn)
+        btn.config(text="Running" + "." * self._anim_dots)
+        self._anim_id = self.after(500, self._animate_run_btn)
+
+    # ── 타이틀 깜빡임 ────────────────────────────────────────
+    def _flash_title(self, count=6):
+        if count <= 0:
+            self.title("ELT Runner  v1.91")
+            return
+        if count % 2 == 0:
+            self.title(">> Done -- ELT Runner  v1.91")
+        else:
+            self.title("ELT Runner  v1.91")
+        self.after(500, self._flash_title, count - 1)
+
+    # ── 커스텀 확인 다이얼로그 공통 ──────────────────────────
+    def _themed_confirm(self, title, body_builder, ok_text="OK",
+                        ok_color="green", ok_active="teal") -> bool:
+        """테마 통일된 확인 다이얼로그. body_builder(frame)로 본문 구성."""
+        dlg = tk.Toplevel(self)
+        dlg.title(title)
+        dlg.resizable(False, False)
+        dlg.configure(bg=C["base"])
+        dlg.grab_set()
+        dlg.transient(self)
+
+        result = [False]
+
+        body = tk.Frame(dlg, bg=C["base"])
+        body.pack(padx=4, pady=(12, 6))
+        body_builder(body)
+
+        tk.Frame(dlg, bg=C["surface1"], height=1).pack(fill="x", padx=12, pady=(4, 8))
+
+        btn_frame = tk.Frame(dlg, bg=C["base"])
+        btn_frame.pack(pady=(0, 12))
+
+        def on_ok():
+            result[0] = True
+            dlg.destroy()
+
+        def on_cancel():
+            dlg.destroy()
+
+        ok_btn = tk.Button(btn_frame, text=ok_text, width=10, command=on_ok,
+                           bg=C[ok_color], fg=C["crust"], font=FONTS["body_bold"],
+                           activebackground=C[ok_active], cursor="hand2")
+        ok_btn.pack(side="left", padx=8)
+        tk.Button(btn_frame, text="Cancel", width=10, command=on_cancel,
+                  bg=C["surface0"], fg=C["text"], font=FONTS["body"],
+                  activebackground=C["surface1"], cursor="hand2").pack(side="left", padx=8)
+
+        dlg.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - dlg.winfo_width()) // 2
+        y = self.winfo_y() + (self.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{x}+{y}")
+
+        dlg.protocol("WM_DELETE_WINDOW", on_cancel)
+        dlg.bind("<Return>", lambda e: on_ok())
+        dlg.bind("<Escape>", lambda e: on_cancel())
+        ok_btn.focus_set()
+
+        dlg.wait_window()
+        return result[0]
+
+    # ── overwrite 확인 다이얼로그 ─────────────────────────────
+    def _show_overwrite_confirm(self) -> bool:
+        kw_key = {"bg": C["base"], "fg": C["overlay0"], "font": FONTS["body"]}
+
+        def build(body):
+            # 경고 아이콘 + 메시지
+            tk.Label(body, text="\u26a0  export.overwrite = ON", bg=C["base"],
+                     fg=C["red"], font=FONTS["h2"]).pack(pady=(0, 8))
+            tk.Label(body, text="\uae30\uc874 \ub370\uc774\ud130\ub97c \ub36e\uc5b4\uc4f8 \uc218 \uc788\uc2b5\ub2c8\ub2e4.\n\uacc4\uc18d\ud558\uc2dc\uaca0\uc2b5\ub2c8\uae4c?",
+                     **kw_key, justify="center").pack()
+
+        return self._themed_confirm("\u2501 Overwrite \ud655\uc778", build,
+                                    ok_text="Continue", ok_color="red", ok_active="peach")
+
+    # ── 실행 확인 다이얼로그 ─────────────────────────────────
+    def _show_run_confirm(self) -> bool:
+        mode = self.mode_var.get()
+        mode_label = {"run": "Run", "retry": "Retry"}.get(mode, mode)
+        selected_stages = [s for s in ("export", "load_local", "transform", "report")
+                           if getattr(self, f"_stage_{s}").get()]
+        stages_str = " \u2192 ".join(selected_stages) if selected_stages else "(all)"
+        params = {k.get().strip(): v.get().strip()
+                  for k, v in self._param_entries
+                  if k.get().strip() and v.get().strip()}
+        params_str = ", ".join(f"{k}={v}" for k, v in params.items())
+        timeout_val = self._ov_timeout.get().strip() or "1800"
+        ov_on = self._ov_overwrite.get()
+
+        kw_key = {"bg": C["base"], "fg": C["overlay0"], "font": FONTS["body"]}
+        kw_val = {"bg": C["base"], "fg": C["text"], "font": FONTS["body_bold"]}
+        pad_k = {"padx": (16, 4), "pady": 3}
+        pad_v = {"padx": (0, 16), "pady": 3}
+
+        def build(body):
+            row = 0
+            tk.Label(body, text="Mode", **kw_key).grid(row=row, column=0, sticky="e", **pad_k)
+            mode_fg = C["blue"] if mode == "run" else C["peach"]
+            tk.Label(body, text=mode_label, bg=C["base"], fg=mode_fg,
+                     font=FONTS["body_bold"]).grid(row=row, column=1, sticky="w", **pad_v)
+            row += 1
+
+            tk.Label(body, text="Source", **kw_key).grid(row=row, column=0, sticky="e", **pad_k)
+            tk.Label(body, text=self._source_type_var.get(), **kw_val).grid(
+                row=row, column=1, sticky="w", **pad_v)
+            tk.Label(body, text="Overwrite", **kw_key).grid(row=row, column=2, sticky="e", **pad_k)
+            tk.Label(body, text="ON" if ov_on else "OFF", bg=C["base"],
+                     fg=C["red"] if ov_on else C["overlay0"],
+                     font=FONTS["body_bold"]).grid(row=row, column=3, sticky="w", **pad_v)
+            row += 1
+
+            tk.Label(body, text="Target", **kw_key).grid(row=row, column=0, sticky="e", **pad_k)
+            tk.Label(body, text=self._target_type_var.get(), **kw_val).grid(
+                row=row, column=1, sticky="w", **pad_v)
+            tk.Label(body, text="Timeout", **kw_key).grid(row=row, column=2, sticky="e", **pad_k)
+            tk.Label(body, text=timeout_val, **kw_val).grid(row=row, column=3, sticky="w", **pad_v)
+            row += 1
+
+            tk.Label(body, text="Stages", **kw_key).grid(row=row, column=0, sticky="e", **pad_k)
+            tk.Label(body, text=stages_str, **kw_val).grid(
+                row=row, column=1, columnspan=3, sticky="w", **pad_v)
+            row += 1
+
+            if params_str:
+                tk.Label(body, text="Params", **kw_key).grid(row=row, column=0, sticky="e", **pad_k)
+                tk.Label(body, text=params_str, **kw_val).grid(
+                    row=row, column=1, columnspan=3, sticky="w", **pad_v)
+
+        return self._themed_confirm("\u2501 \uc2e4\ud589 \ud655\uc778", build)
+
     # ── 실행 / 멈춤 ──────────────────────────────────────────
     def _on_run(self):
+        mode = self.mode_var.get()
+
+        # overwrite=true 확인 (Dryrun은 실제 덮어쓰기 없으므로 스킵)
+        if self._ov_overwrite.get() and mode != "plan":
+            if not self._show_overwrite_confirm():
+                return
+
+        # 실행 전 확인 다이얼로그 (Dryrun은 확인 없이 바로 실행)
+        if mode != "plan":
+            if not self._show_run_confirm():
+                return
+
         cmd = self._build_command()
         self._log_sys(f"Run: {chr(32).join(cmd)}")
         self._set_status("● running", C["green"])
@@ -1844,10 +2339,15 @@ class BatchRunnerGUI(tk.Tk):
         self._progress_label.config(text="Starting...")
         self._elapsed_job_id = self.after(1000, self._tick_elapsed)
 
+        self._dryrun_btn.config(state="disabled", bg=C["surface0"], fg=C["overlay0"])
         self._run_btn.config(state="disabled", bg=C["surface0"], fg=C["overlay0"])
+        self._retry_btn.config(state="disabled", bg=C["surface0"], fg=C["overlay0"])
         self._theme_combo.config(state="disabled")
         self._stop_btn.config(state="normal", bg=C["red"], fg=C["crust"],
                               activebackground=C["peach"])
+        self._set_left_panel_state(False)
+        self._anim_dots = 0
+        self._anim_id = self.after(500, self._animate_run_btn)
 
         env = os.environ.copy()
         # Windows에서 한글 깨짐 방지: PYTHONIOENCODING, PYTHONUTF8 강제 설정
@@ -1894,11 +2394,16 @@ class BatchRunnerGUI(tk.Tk):
 
     def _guess_tag(self, line: str) -> str:
         low = line.lower()
-        if any(k in low for k in ("error", "exception", "traceback", "failed", "오류")):
+        # STAGE 시작/끝 패턴 우선 감지
+        if any(k in low for k in ("=== stage", "--- stage", "stage start", "[stage")):
+            return "STAGE_HEADER"
+        if any(k in low for k in ("stage done", "stage complete", "stage finish")):
+            return "STAGE_DONE"
+        if any(k in low for k in ("error", "exception", "traceback", "failed")):
             return "ERROR"
-        if any(k in low for k in ("warn", "warning", "경고")):
+        if any(k in low for k in ("warn", "warning")):
             return "WARN"
-        if any(k in low for k in ("done", "success", "finish", "completed", "완료")):
+        if any(k in low for k in ("done", "success", "finish", "completed")):
             return "SUCCESS"
         if any(k in low for k in ("===", "---", "pipeline", "stage", "job start", "job finish")):
             return "SYS"
@@ -1912,6 +2417,8 @@ class BatchRunnerGUI(tk.Tk):
             secs = int(time.time() - self._elapsed_start)
             elapsed = f"  {secs//60:02d}:{secs%60:02d}"
         self._progress_label.config(text=f"{label}{elapsed}")
+        if hasattr(self, '_stage_status'):
+            self._stage_status.config(text=label)
 
     def _tick_elapsed(self):
         import time
@@ -1924,6 +2431,10 @@ class BatchRunnerGUI(tk.Tk):
 
     def _on_done(self, ret: int):
         import time
+        # 애니메이션 취소
+        if self._anim_id:
+            self.after_cancel(self._anim_id)
+            self._anim_id = None
         # elapsed 타이머 정지
         if self._elapsed_job_id:
             self.after_cancel(self._elapsed_job_id)
@@ -1936,18 +2447,21 @@ class BatchRunnerGUI(tk.Tk):
         elapsed_str = f"{secs//60:02d}:{secs%60:02d}"
 
         if ret == 0:
-            self._log_write(f"✔ Done  ({elapsed_str})", "SUCCESS")
+            self._log_write(f"Done  ({elapsed_str})", "SUCCESS")
             self._set_status("● done", C["green"])
             self._progress_bar["value"] = 100
             self._progress_label.config(text=f"Done  {elapsed_str}")
         elif ret < 0:
-            self._log_write(f"✖ Stopped  ({elapsed_str})", "WARN")
+            self._log_write(f"Stopped  ({elapsed_str})", "WARN")
             self._set_status("● stopped", C["yellow"])
             self._progress_label.config(text=f"Stopped  {elapsed_str}")
         else:
-            self._log_write(f"✖ Error (code={ret})  ({elapsed_str})", "ERROR")
+            self._log_write(f"Error (code={ret})  ({elapsed_str})", "ERROR")
             self._set_status(f"● error (code={ret})", C["red"])
             self._progress_label.config(text=f"Error  {elapsed_str}")
+        # 완료 알림
+        self.bell()
+        self._flash_title()
         self._reset_buttons()
 
     def _on_stop(self):
@@ -1961,9 +2475,17 @@ class BatchRunnerGUI(tk.Tk):
         self._set_status("● stopped", C["yellow"])
 
     def _reset_buttons(self):
-        self._run_btn.config(state="normal", bg=C["green"], fg=C["crust"])
+        self._dryrun_btn.config(state="normal", bg=C["yellow"], fg=C["crust"],
+                                text="Dryrun")
+        self._run_btn.config(state="normal", bg=C["blue"], fg=C["crust"],
+                             text="▶  Run")
+        self._retry_btn.config(state="normal", bg=C["peach"], fg=C["crust"],
+                               text="Retry")
         self._stop_btn.config(state="disabled", bg=C["surface0"], fg=C["overlay0"])
         self._theme_combo.config(state="readonly")
+        self._set_left_panel_state(True)
+        if hasattr(self, '_stage_status'):
+            self._stage_status.config(text="")
 
 
 # ─────────────────────────────────────────────────────────────

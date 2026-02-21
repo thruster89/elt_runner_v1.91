@@ -1,0 +1,43 @@
+{
+  "job_name": "gui_run",
+  "run_id": "gui_run_09",
+  "mode": "plan",
+  "generated_at": "2026-02-21 14:11:48",
+  "params": {},
+  "source": {
+    "type": "oracle",
+    "host": "local"
+  },
+  "export_config": {
+    "sql_dir": "sql/export/A",
+    "out_dir": "data/export/A",
+    "format": "csv",
+    "compression": "gzip",
+    "overwrite": true,
+    "parallel_workers": 1
+  },
+  "total_tasks": 2,
+  "warning_count": 2,
+  "tasks": [
+    {
+      "sql_file": "a1.sql",
+      "params": {},
+      "task_key": "a1",
+      "output_file": "C:\\Users\\thrus\\Downloads\\ELT_Runner_v1.91\\elt_runner_v1.91\\data\\export\\A\\gui_run\\a1__local.csv.gz",
+      "rendered_sql_preview": "select * from CONTRACT_INFO\nwhere TO_CHAR(CONTRACT_DATE, 'YYYYMM') = :clsYymm",
+      "warnings": [
+        "suspected unresolved parameter: [':clsYymm']"
+      ]
+    },
+    {
+      "sql_file": "a2.sql",
+      "params": {},
+      "task_key": "a2",
+      "output_file": "C:\\Users\\thrus\\Downloads\\ELT_Runner_v1.91\\elt_runner_v1.91\\data\\export\\A\\gui_run\\a2__local.csv.gz",
+      "rendered_sql_preview": "select * from DEPOSIT_INFO\nwhere TO_CHAR(DEPOSIT_DATE, 'YYYYMM') = :clsYymm",
+      "warnings": [
+        "suspected unresolved parameter: [':clsYymm']"
+      ]
+    }
+  ]
+}

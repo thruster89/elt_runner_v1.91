@@ -90,7 +90,7 @@ def run(ctx: RunContext):
             from adapters.targets.sqlite_target import load_csv, _ensure_history
             _ensure_history(conn)
             if schema:
-                logger.info("SQLite는 스키마를 지원하지 않아 schema 설정을 무시합니다 (schema=%s)", schema)
+                logger.info("SQLite: schema not supported, ignoring schema setting (schema=%s)", schema)
             _run_load_loop(ctx, logger, csv_files, sql_map, conn_type,
                            load_fn=lambda table, csv_path, file_hash:
                                load_csv(conn, ctx.job_name, table, csv_path, file_hash, ctx.mode))

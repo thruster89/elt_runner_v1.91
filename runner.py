@@ -77,7 +77,7 @@ def generate_run_id(base_dir: Path, job_name: str) -> str:
 def resolve_retry_run_id(base_dir: Path, job_name: str, logger) -> str:
     job_dir = base_dir / job_name
     if not job_dir.exists():
-        logger.warning("RETRY: job 디렉토리 없음 → 새 run_id 생성")
+        logger.warning("RETRY: no directory found → generating new run_id")
         return generate_run_id(base_dir, job_name)
     for d in sorted(job_dir.iterdir(), reverse=True):
         if not d.is_dir():
@@ -89,11 +89,11 @@ def resolve_retry_run_id(base_dir: Path, job_name: str, logger) -> str:
             with open(run_info_path, encoding="utf-8") as f:
                 info = json.load(f)
             if any(v.get("status") in ("failed", "pending") for v in info.get("tasks", {}).values()):
-                logger.info("RETRY: 재실행 대상 run_id = %s", d.name)
+                logger.info("RETRY: retry target run_id = %s", d.name)
                 return d.name
         except Exception:
             continue
-    logger.info("RETRY: 실패한 이전 run 없음 → 새 run_id 생성")
+    logger.info("RETRY: no failed previous run found → generating new run_id")
     return generate_run_id(base_dir, job_name)
 
 
@@ -222,7 +222,7 @@ def run_pipeline(ctx: RunContext):
         stages = [s for s in stages if s in stage_filter]
         ctx.logger.info("Stage filter: %s → %s", before, stages)
         if not stages:
-            ctx.logger.warning("--stage 필터 결과 실행할 stage 없음 (filter=%s)", stage_filter)
+            ctx.logger.warning("--stage filter result: no stages to execute (filter=%s)", stage_filter)
             return
 
     ctx.logger.info("")
@@ -325,17 +325,17 @@ def main():
         jobs_dir = work_dir / "jobs"
         yml_files = sorted(jobs_dir.glob("*.yml")) if jobs_dir.exists() else []
         if not yml_files:
-            parser.error("--job 를 지정하거나 jobs/ 폴더에 yml 파일을 넣어주세요.")
+            parser.error("specify --job or place a yml file in the jobs/ folder.")
         if len(yml_files) == 1:
             job_path = yml_files[0]
         else:
-            print("jobs/ 폴더에서 아래 yml 파일을 찾았습니다:")
+            print("Found the following yml files in jobs/ folder:")
             for i, f in enumerate(yml_files, 1):
                 print(f"  [{i}] {f.name}")
-            choice = input("번호 선택 (Enter = 1): ").strip()
+            choice = input("Select number (Enter = 1): ").strip()
             idx = int(choice) - 1 if choice.isdigit() else 0
             job_path = yml_files[max(0, min(idx, len(yml_files) - 1))]
-            print(f"  → {job_path.name} 선택됨\n")
+            print(f"  → {job_path.name} selected\n")
     else:
         job_path = Path(args.job)
         # jobs/ 상대경로 자동 보완

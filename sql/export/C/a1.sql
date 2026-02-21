@@ -1,2 +1,2 @@
 select * from CONTRACT_INFO
-where TO_CHAR(CONTRACT_DATE, 'YYYYMM') = :SetlYm
+where TO_CHAR(CONTRACT_DATE, 'YYYYMM') = :abc

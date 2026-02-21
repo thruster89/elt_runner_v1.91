@@ -223,7 +223,7 @@ def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
     source_sel = ctx.job_config.get("source", {})
     host_name = source_sel.get("host", "")
 
-    logger.info("EXPORT [PLAN] dryrun report 생성 중...")
+    logger.info("EXPORT [PLAN] generating dryrun report...")
 
     tasks = []
     for sql_file in sql_files:
@@ -243,14 +243,14 @@ def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
             warnings = []
             upper = rendered.upper().strip()
             if not upper.startswith("SELECT") and "SELECT" not in upper[:200]:
-                warnings.append("SELECT 구문이 없거나 첫 구문이 SELECT가 아님")
+                warnings.append("no SELECT found or first statement is not SELECT")
 
             # 치환 안 된 파라미터 패턴 감지 (${xxx}, :xxx, {#xxx})
             # 문자열 리터럴('...' 안) 내용을 제거한 뒤 검사 → :MI, :SS 등 오탐 방지
             sql_no_strings = re.sub(r"'[^']*'", "''", rendered)
             leftover = re.findall(r'\$\{[^}]+\}|\{#[^}]+\}|(?<!\:)\:[a-zA-Z_]\w*', sql_no_strings)
             if leftover:
-                warnings.append(f"미치환 파라미터 의심: {leftover}")
+                warnings.append(f"suspected unresolved parameter: {leftover}")
 
             tasks.append({
                 "sql_file": sql_file.name,
@@ -302,19 +302,19 @@ def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
         f.write(f"  Source  : {source_sel.get('type')} / {source_sel.get('host')}\n")
         f.write(f"  Params  : {ctx.params}\n")
         f.write("=" * 70 + "\n\n")
-        f.write(f"총 task 수  : {len(tasks)}\n")
-        f.write(f"경고 있는 task : {report['warning_count']}\n\n")
+        f.write(f"total tasks    : {len(tasks)}\n")
+        f.write(f"tasks with warnings : {report['warning_count']}\n\n")
 
         for i, t in enumerate(tasks, 1):
             status = "⚠ WARNING" if t["warnings"] else "OK"
             f.write(f"[{i:03d}] {status}\n")
-            f.write(f"  SQL 파일  : {t['sql_file']}\n")
+            f.write(f"  SQL file  : {t['sql_file']}\n")
             f.write(f"  Params   : {t['params']}\n")
-            f.write(f"  출력 파일 : {t['output_file']}\n")
+            f.write(f"  output file : {t['output_file']}\n")
             if t["warnings"]:
                 for w in t["warnings"]:
                     f.write(f"  ⚠  {w}\n")
-            f.write(f"  SQL 미리보기:\n")
+            f.write(f"  SQL preview:\n")
             for line in t["rendered_sql_preview"].splitlines():
                 f.write(f"    {line}\n")
             f.write("\n")
@@ -322,16 +322,16 @@ def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
     # 콘솔 요약 출력
     logger.info("")
     logger.info("=" * 60)
-    logger.info(" DRYRUN REPORT 요약")
+    logger.info(" DRYRUN REPORT summary")
     logger.info("-" * 60)
-    logger.info(" 총 task 수       : %d", len(tasks))
-    logger.info(" 경고 있는 task   : %d", report["warning_count"])
-    logger.info(" 리포트 (JSON)    : %s", json_path)
-    logger.info(" 리포트 (TEXT)    : %s", txt_path)
+    logger.info(" total tasks       : %d", len(tasks))
+    logger.info(" tasks with warnings : %d", report["warning_count"])
+    logger.info(" report (JSON)    : %s", json_path)
+    logger.info(" report (TEXT)    : %s", txt_path)
     logger.info("=" * 60)
 
     if report["warning_count"] > 0:
-        logger.warning("⚠  경고가 있는 task가 있습니다. plan_report.txt 를 확인하세요.")
+        logger.warning("some tasks have warnings. check plan_report.txt")
 
     for t in tasks:
         status = "⚠ WARN" if t["warnings"] else "OK  "
@@ -339,7 +339,7 @@ def run_plan(ctx, sql_files, param_sets, export_cfg, out_dir, ext):
         logger.info("  [%s] %s  params=%s%s", status, t["sql_file"], t["params"], warn_str)
 
     logger.info("")
-    logger.info("EXPORT [PLAN] 완료 — 실제 DB 연결 없음")
+    logger.info("EXPORT [PLAN] done — no actual DB connection")
 
 
 # ---------------------------
@@ -357,7 +357,7 @@ def load_failed_tasks(ctx, export_cfg) -> set:
     job_dir = export_base / ctx.job_name
 
     if not job_dir.exists():
-        logger.warning("RETRY: job 디렉토리 없음 (%s) → 전체 실행", job_dir)
+        logger.warning("RETRY: no job directory found (%s) — running all tasks", job_dir)
         return None
 
     # run_info.json이 있는 디렉토리 중 tasks가 있는 것만, 최신순 정렬
@@ -380,7 +380,7 @@ def load_failed_tasks(ctx, export_cfg) -> set:
             continue
 
     if not candidates:
-        logger.warning("RETRY: 이전 run 기록 없음 → 전체 실행")
+        logger.warning("RETRY: no previous run history found — running all tasks")
         return None
 
     prev_dir, prev_info = candidates[0]
@@ -389,15 +389,15 @@ def load_failed_tasks(ctx, export_cfg) -> set:
 
     failed_keys = {k for k, v in tasks.items() if v.get("status") in ("failed", "pending")}
 
-    logger.info("RETRY: 이전 run_id=%s 기준", prev_run_id)
-    logger.info("RETRY: 전체 task=%d / failed+pending=%d", len(tasks), len(failed_keys))
+    logger.info("RETRY: based on previous run_id=%s", prev_run_id)
+    logger.info("RETRY: total tasks=%d / failed+pending=%d", len(tasks), len(failed_keys))
 
     if not failed_keys:
-        logger.info("RETRY: 실패한 task 없음 → 전체 실행")
+        logger.info("RETRY: no failed tasks — running all tasks")
         return None
 
     for k in sorted(failed_keys):
-        logger.info("  재실행 대상: %s", k)
+        logger.info("  retry target: %s", k)
 
     return failed_keys
 
@@ -475,11 +475,11 @@ def run(ctx: RunContext):
         before = len(sql_files)
         sql_files = [f for f in sql_files if _matches(f)]
         logger.info(
-            "EXPORT --include 필터 적용: %d → %d 개 (패턴: %s)",
+            "EXPORT --include filter applied: %d -> %d files (patterns: %s)",
             before, len(sql_files), include_patterns
         )
         if not sql_files:
-            logger.warning("--include 필터 결과 실행할 SQL 없음 (patterns=%s)", include_patterns)
+            logger.warning("--include filter resulted in no SQL files to run (patterns=%s)", include_patterns)
             return
 
     param_sets = expand_params(ctx.params)
@@ -523,7 +523,7 @@ def run(ctx: RunContext):
 
         # retry 모드: failed_task_keys에 없으면 skip
         if failed_task_keys is not None and task_key not in failed_task_keys:
-            logger.info("%s RETRY skip (이전 run 성공)", prefix)
+            logger.info("%s RETRY skip (succeeded in previous run)", prefix)
             return
 
         # task 시작 상태 기록

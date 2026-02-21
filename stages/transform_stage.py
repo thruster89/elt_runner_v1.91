@@ -63,7 +63,7 @@ def run(ctx: RunContext):
     try:
         conn, conn_type, label = connect_target(ctx, target_cfg)
     except Exception as e:
-        logger.exception("TRANSFORM target 연결 실패: %s", e)
+        logger.exception("TRANSFORM failed to connect to target: %s", e)
         logger.info("TRANSFORM stage end")
         return
 
@@ -96,7 +96,7 @@ def _run_sql_loop(ctx, conn, conn_type, sql_files, on_error):
             logger.error("TRANSFORM [%d/%d] FAILED (%.2fs): %s", i, total, time.time() - start, e)
             failed += 1
             if on_error == "stop":
-                logger.error("TRANSFORM 중단 (on_error=stop)")
+                logger.error("TRANSFORM aborted (on_error=stop)")
                 break
 
     logger.info("TRANSFORM summary | success=%d failed=%d total=%d", success, failed, total)
