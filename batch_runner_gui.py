@@ -970,8 +970,10 @@ class BatchRunnerGUI(tk.Tk):
             ov_var.trace_add("write", lambda *_: self._refresh_preview())
         for var in (self.job_var, self.mode_var, self._env_path_var, self._debug_var):
             var.trace_add("write", lambda *_: self._refresh_preview())
-        # auto-suggest 트리거
+        # auto-suggest 트리거 (export / transform / report sql_dir 변경 시 파라미터 재스캔)
         self._export_sql_dir.trace_add("write", lambda *_: self.after(300, self._on_export_sql_dir_change))
+        self._transform_sql_dir.trace_add("write", lambda *_: self.after(300, self._scan_and_suggest_params))
+        self._report_sql_dir.trace_add("write", lambda *_: self.after(300, self._scan_and_suggest_params))
         self._target_type_var.trace_add("write", lambda *_: self._refresh_preview())
 
     # ── 헬퍼 ─────────────────────────────────────────────────
@@ -1836,21 +1838,41 @@ class BatchRunnerGUI(tk.Tk):
     # ── SQL 파라미터 자동 감지 ─────────────────────────────────
     def _scan_and_suggest_params(self):
         """
-        현재 export.sql_dir 을 스캔해서 발견된 파라미터를 Params 섹션에 자동 제시.
+        export / transform / report SQL 디렉토리를 모두 스캔해서
+        발견된 파라미터를 Params 섹션에 자동 제시.
         이미 사용자가 입력한 값은 항상 유지.
         """
         wd = Path(self._work_dir.get())
-        sql_dir_rel = self._export_sql_dir.get().strip()
-        if not sql_dir_rel:
-            return
-        sql_dir = Path(sql_dir_rel) if Path(sql_dir_rel).is_absolute() else wd / sql_dir_rel
 
-        # sql filter 선택 있으면 해당 파일만 스캔 (sql_dir 기준 상대경로)
-        if self._selected_sqls:
-            sel_files = [sql_dir / p for p in self._selected_sqls if (sql_dir / p).exists()]
-            detected = _scan_params_from_files(sel_files)
-        else:
-            detected = scan_sql_params(sql_dir)
+        def _resolve(rel):
+            if not rel:
+                return None
+            p = Path(rel) if Path(rel).is_absolute() else wd / rel
+            return p if p.exists() else None
+
+        # ── export SQL 파일 수집 ──
+        all_sql_files = []
+        export_dir = _resolve(self._export_sql_dir.get().strip())
+
+        if self._selected_sqls and export_dir:
+            # sql filter 선택 있으면 export는 해당 파일만
+            all_sql_files.extend(
+                export_dir / p for p in self._selected_sqls
+                if (export_dir / p).exists()
+            )
+        elif export_dir:
+            all_sql_files.extend(export_dir.rglob("*.sql"))
+
+        # ── transform / report SQL 디렉토리도 스캔 ──
+        for dir_var in (self._transform_sql_dir, self._report_sql_dir):
+            d = _resolve(dir_var.get().strip())
+            if d:
+                all_sql_files.extend(d.rglob("*.sql"))
+
+        if not all_sql_files:
+            return
+
+        detected = _scan_params_from_files(all_sql_files)
 
         # 현재 params (사용자 입력값)
         current = {k.get(): v.get() for k, v in self._param_entries if k.get()}
