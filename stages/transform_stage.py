@@ -56,6 +56,21 @@ def run(ctx: RunContext):
 
     conn, conn_type, label = connect_target(ctx, target_cfg)
 
+    # schema 결정: transform.schema 우선, 없으면 target.schema fallback
+    schema = (transform_cfg.get("schema") or "").strip() \
+             or (target_cfg.get("schema") or "").strip() \
+             or ""
+
+    # DuckDB: schema가 설정되어 있으면 세션 기본 스키마 지정
+    if conn_type == "duckdb" and schema:
+        conn.execute(f'SET schema = \'{schema}\'')
+        logger.info("TRANSFORM SET schema = '%s'", schema)
+
+    # schema를 params에 주입
+    # SQL에서 ${schema}.tablename 또는 @{schema}tablename 사용 가능
+    # @{schema} 사용 시: 값이 있으면 "schema." 으로, 없으면 "" 으로 치환
+    ctx.params.setdefault("schema", schema)
+
     logger.info("TRANSFORM target=%s | sql_count=%d | on_error=%s", label, len(sql_files), on_error)
 
     try:
