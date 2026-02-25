@@ -15,6 +15,7 @@ def export_sql_to_csv(
     compression="none",
     fetch_size=10000,
     stall_seconds=1800,
+    log_prefix="",
 ):
     cursor = conn.cursor()
 
@@ -47,7 +48,7 @@ def export_sql_to_csv(
 
                 while True:
                     if stop_event.is_set():
-                        logger.warning("Export interrupted")
+                        logger.warning("%s Export interrupted", log_prefix)
                         interrupted = True
                         break
 
@@ -67,12 +68,12 @@ def export_sql_to_csv(
                     total_rows += len(rows)
 
                     if total_rows % (fetch_size * 5) == 0:
-                        logger.info("CSV progress: %d rows", total_rows)
+                        logger.info("%s CSV progress: %d rows", log_prefix, total_rows)
                         last_log_ts = time.time()
                     else:
                         now = time.time()
                         if now - last_log_ts >= 120:
-                            logger.info("CSV progress: %d rows (heartbeat)", total_rows)
+                            logger.info("%s CSV progress: %d rows (heartbeat)", log_prefix, total_rows)
                             last_log_ts = now
 
             if interrupted:
@@ -85,7 +86,8 @@ def export_sql_to_csv(
             logger.debug("File committed: %s", out_file)
 
             logger.info(
-                "CSV export completed | rows=%d file=%s",
+                "%s CSV export completed | rows=%d file=%s",
+                log_prefix,
                 total_rows,
                 out_file,
             )

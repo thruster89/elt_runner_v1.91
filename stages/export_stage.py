@@ -575,6 +575,7 @@ def run(ctx: RunContext):
                 compression=compression,
                 fetch_size=10000,
                 stall_seconds=stall_seconds,
+                log_prefix=prefix,
             )
 
             elapsed = time.time() - start_time

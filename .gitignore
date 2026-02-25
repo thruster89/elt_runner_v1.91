@@ -5,11 +5,19 @@ __pycache__/
 
 # Runtime output
 logs/
-data/local/*.duckdb
-data/local/*.sqlite
-data/export/job_*/
+data/
 !data/export/job_sample/
-data/report/
+
+# Data files (어디서든 무시)
+*.csv
+*.gz
+*.duckdb
+*.sqlite
+*.log
+
+# Run info (JSON output)
+run_info.json
+plan_report.json
 
 # Sensitive config (contains passwords)
 config/env.yml
@@ -19,3 +27,4 @@ config/env.yml
 .vscode/
 *.swp
 Thumbs.db
+.DS_Store

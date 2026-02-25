@@ -970,8 +970,10 @@ class BatchRunnerGUI(tk.Tk):
             ov_var.trace_add("write", lambda *_: self._refresh_preview())
         for var in (self.job_var, self.mode_var, self._env_path_var, self._debug_var):
             var.trace_add("write", lambda *_: self._refresh_preview())
-        # auto-suggest 트리거
+        # auto-suggest 트리거 (export / transform / report sql_dir 변경 시 파라미터 재스캔)
         self._export_sql_dir.trace_add("write", lambda *_: self.after(300, self._on_export_sql_dir_change))
+        self._transform_sql_dir.trace_add("write", lambda *_: self.after(300, self._scan_and_suggest_params))
+        self._report_sql_dir.trace_add("write", lambda *_: self.after(300, self._scan_and_suggest_params))
         self._target_type_var.trace_add("write", lambda *_: self._refresh_preview())
 
     # ── 헬퍼 ─────────────────────────────────────────────────
@@ -1836,21 +1838,52 @@ class BatchRunnerGUI(tk.Tk):
     # ── SQL 파라미터 자동 감지 ─────────────────────────────────
     def _scan_and_suggest_params(self):
         """
-        현재 export.sql_dir 을 스캔해서 발견된 파라미터를 Params 섹션에 자동 제시.
+        export / transform / report SQL 디렉토리를 스테이지별로 스캔해서
+        발견된 파라미터를 Params 섹션에 그룹별 자동 제시.
         이미 사용자가 입력한 값은 항상 유지.
         """
         wd = Path(self._work_dir.get())
-        sql_dir_rel = self._export_sql_dir.get().strip()
-        if not sql_dir_rel:
-            return
-        sql_dir = Path(sql_dir_rel) if Path(sql_dir_rel).is_absolute() else wd / sql_dir_rel
 
-        # sql filter 선택 있으면 해당 파일만 스캔 (sql_dir 기준 상대경로)
-        if self._selected_sqls:
-            sel_files = [sql_dir / p for p in self._selected_sqls if (sql_dir / p).exists()]
-            detected = _scan_params_from_files(sel_files)
-        else:
-            detected = scan_sql_params(sql_dir)
+        def _resolve(rel):
+            if not rel:
+                return None
+            p = Path(rel) if Path(rel).is_absolute() else wd / rel
+            return p if p.exists() else None
+
+        # ── 스테이지별 SQL 파일 수집 + 파라미터 감지 ──
+        stage_params: dict[str, set[str]] = {}
+
+        # export
+        export_files = []
+        export_dir = _resolve(self._export_sql_dir.get().strip())
+        if self._selected_sqls and export_dir:
+            export_files = [export_dir / p for p in self._selected_sqls
+                            if (export_dir / p).exists()]
+        elif export_dir:
+            export_files = list(export_dir.rglob("*.sql"))
+        if export_files:
+            stage_params["export"] = set(_scan_params_from_files(export_files))
+
+        # transform
+        tfm_dir = _resolve(self._transform_sql_dir.get().strip())
+        if tfm_dir:
+            tfm_files = list(tfm_dir.rglob("*.sql"))
+            if tfm_files:
+                stage_params["transform"] = set(_scan_params_from_files(tfm_files))
+
+        # report
+        rpt_dir = _resolve(self._report_sql_dir.get().strip())
+        if rpt_dir:
+            rpt_files = list(rpt_dir.rglob("*.sql"))
+            if rpt_files:
+                stage_params["report"] = set(_scan_params_from_files(rpt_files))
+
+        all_detected = set()
+        for s in stage_params.values():
+            all_detected |= s
+
+        if not all_detected:
+            return
 
         # 현재 params (사용자 입력값)
         current = {k.get(): v.get() for k, v in self._param_entries if k.get()}
@@ -1859,24 +1892,34 @@ class BatchRunnerGUI(tk.Tk):
         fname = self.job_var.get()
         yml_params = self._jobs.get(fname, {}).get("params", {}) if fname else {}
 
-        merged = {}
-        for p in detected:
+        def _val(p):
             if p in current:
-                merged[p] = current[p]
-            elif p in yml_params:
-                merged[p] = str(yml_params[p])
-            else:
-                merged[p] = ""
-        # 사용자가 직접 추가한 값만 유지 (자동감지였던 것은 제거)
-        prev_detected = getattr(self, "_last_detected_params", set())
-        for k, v in current.items():
-            if k not in merged and k not in prev_detected:
-                merged[k] = v
+                return current[p]
+            if p in yml_params:
+                return str(yml_params[p])
+            return ""
 
-        self._refresh_param_rows(list(merged.items()))
-        if detected and set(detected) != getattr(self, "_last_detected_params", set()):
-            self._last_detected_params = set(detected)
-            self._log_sys(f"SQL params detected: {', '.join(detected)}")
+        # 스테이지별 (key, value) 리스트 구성
+        grouped: list[tuple[str, list[tuple[str, str]]]] = []
+        shown = set()
+        for stage in ("export", "transform", "report"):
+            params = stage_params.get(stage, set())
+            new_params = sorted(params - shown)
+            if new_params:
+                grouped.append((stage, [(p, _val(p)) for p in new_params]))
+                shown |= params
+
+        # 사용자가 직접 추가한 값 (자동감지 아닌 것) 보존
+        prev_detected = getattr(self, "_last_detected_params", set())
+        custom_pairs = [(k, v) for k, v in current.items()
+                        if k not in shown and k not in prev_detected]
+        if custom_pairs:
+            grouped.append(("custom", custom_pairs))
+
+        self._refresh_param_rows_grouped(grouped)
+        if all_detected != getattr(self, "_last_detected_params", set()):
+            self._last_detected_params = set(all_detected)
+            self._log_sys(f"SQL params detected: {', '.join(sorted(all_detected))}")
 
     # ── Source Type 변경 핸들러 ──────────────────────────────
     def _on_source_type_change(self, *_):
@@ -1974,12 +2017,38 @@ class BatchRunnerGUI(tk.Tk):
         self._refresh_preview()
 
     # ── Param 행 관리 ────────────────────────────────────────
+    _STAGE_LABELS = {
+        "export": ("Export", "blue"),
+        "transform": ("Transform", "mauve"),
+        "report": ("Report", "teal"),
+        "custom": ("Custom", "overlay0"),
+    }
+
     def _refresh_param_rows(self, pairs: list):
+        """그룹 없이 flat 리스트로 표시 (스냅샷 복원 / job 선택 시 사용)"""
         for w in self._params_frame.winfo_children():
             w.destroy()
         self._param_entries = []
         for k, v in pairs:
             self._add_param_row(k, str(v))
+
+    def _refresh_param_rows_grouped(self, grouped: list):
+        """스테이지별 그룹 헤더 + param 행 표시"""
+        for w in self._params_frame.winfo_children():
+            w.destroy()
+        self._param_entries = []
+
+        for stage, pairs in grouped:
+            label_text, color_key = self._STAGE_LABELS.get(stage, (stage, "overlay0"))
+            # 그룹 헤더
+            hdr = tk.Frame(self._params_frame, bg=C["mantle"])
+            hdr.pack(fill="x", pady=(4, 1))
+            tk.Frame(hdr, bg=C[color_key], width=3, height=12).pack(side="left", padx=(0, 4))
+            tk.Label(hdr, text=label_text, font=FONTS["mono_small"],
+                     bg=C["mantle"], fg=C[color_key]).pack(side="left")
+            # 파라미터 행
+            for k, v in pairs:
+                self._add_param_row(k, str(v))
 
     def _add_param_row(self, key="", value=""):
         k_var = tk.StringVar(value=key)
