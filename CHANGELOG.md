@@ -1,5 +1,37 @@
 # Batch Runner Changelog
 
+## v1.96 (2026-02-25)
+
+### 신규 기능
+- **스키마 파라미터 지원**: Transform SQL에서 `${schema}` / `@{param}` 스키마 접두사 문법 추가 (미설정 시 자동 제거)
+- **DuckDB SET schema 자동 실행**: Transform stage 실행 시 스키마 자동 설정
+- **GUI Transform 섹션 schema 입력란**: YAML 연동 schema 필드 추가
+- **CSV 파일명 compact 모드**: Export 시 파일명 축약 옵션
+- **주석 행 파라미터 감지 제외**: SQL 주석(`--`) 내 파라미터를 자동감지에서 제외
+- **Load plan 사전 확인 리포트**: Plan 모드에서 파일 크기 포함 리포트 출력
+- **VERSION 파일 연동**: 모든 스크립트(GUI, build.bat, build.ps1, spec)에서 `VERSION` 파일을 읽어 버전 표시 (하드코딩 제거)
+
+### 버그 수정
+- **NaN 엑셀 컬럼 너비 오류**: NaN 값으로 인한 엑셀 export 컬럼 너비 계산 오류 해결
+- **Oracle client AttributeError 방지**: `source_cfg`가 None일 때 발생하는 오류 수정
+- **프리셋 저장 후 캐시 미갱신**: save 후 메모리 캐시 및 `load_mode`/`union_dir` 미로드 버그 해결
+- **CLI 프리뷰 프리셋 파일명 반영**: 선택된 프리셋 파일명이 CLI 프리뷰에 표시되도록 수정
+
+### 변경된 파일
+| 파일 | 변경 내용 |
+|------|-----------|
+| `VERSION` | 1.96 (단일 진실 공급원) |
+| `batch_runner_gui.py` | VERSION 파일 연동, schema 입력란, CSV compact |
+| `engine/sql_utils.py` | `@{param}` 문법 파서, 주석 행 제외 |
+| `stages/export_stage.py` | CSV compact 모드, NaN 너비 수정 |
+| `stages/load_stage.py` | plan 리포트, 파일 크기 정보 |
+| `stages/report_stage.py` | 파라미터 감지 개선 |
+| `stages/transform_stage.py` | `${schema}` 주입, DuckDB SET schema |
+| `adapters/sources/oracle_client.py` | None 안전 처리 |
+| `build.ps1` / `build.bat` / `elt_runner.spec` | VERSION 파일 동적 읽기 |
+
+---
+
 ## v1.78 (2026-02-19)
 
 ### 신규 기능

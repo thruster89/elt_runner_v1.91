@@ -1,10 +1,12 @@
 @echo off
 setlocal EnableDelayedExpansion
-title ELT Runner v1.90 - Build
+set /p APP_VER=<VERSION
+if "!APP_VER!"=="" set APP_VER=0.0
+title ELT Runner v!APP_VER! - Build
 
 echo.
 echo  =====================================================
-echo    ELT Runner v1.90  --  Windows EXE Build
+echo    ELT Runner v!APP_VER!  --  Windows EXE Build
 echo  =====================================================
 echo.
 

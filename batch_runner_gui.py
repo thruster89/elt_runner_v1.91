@@ -1,5 +1,5 @@
 """
-batch_runner_gui.py  ─  Tkinter GUI for ELT Runner v1.91
+batch_runner_gui.py  ─  Tkinter GUI for ELT Runner
 실행: python batch_runner_gui.py   (batch_runner 프로젝트 루트에서)
 """
 
@@ -14,6 +14,17 @@ import json
 import yaml
 from pathlib import Path
 from datetime import datetime
+
+# ─────────────────────────────────────────────────────────────
+# 버전 (VERSION 파일에서 읽기)
+# ─────────────────────────────────────────────────────────────
+def _read_version() -> str:
+    vf = Path(__file__).resolve().parent / "VERSION"
+    if vf.exists():
+        return vf.read_text(encoding="utf-8").strip()
+    return "0.0"
+
+APP_VERSION = _read_version()
 
 # ─────────────────────────────────────────────────────────────
 # 색상 팔레트 11종
@@ -634,7 +645,7 @@ STAGE_CONFIG = [
 class BatchRunnerGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("ELT Runner  v1.91")
+        self.title(f"ELT Runner  v{APP_VERSION}")
         self.geometry("1340x800")
         self.minsize(1000, 620)
         self.configure(bg=C["base"])
@@ -665,6 +676,7 @@ class BatchRunnerGUI(tk.Tk):
         self._export_sql_dir  = tk.StringVar(value="sql/export")
         self._export_out_dir  = tk.StringVar(value="data/export")
         # Transform / Report paths
+        self._transform_schema  = tk.StringVar(value="")
         self._transform_sql_dir = tk.StringVar(value="sql/transform/duckdb")
         self._report_sql_dir    = tk.StringVar(value="sql/report")
         self._report_out_dir    = tk.StringVar(value="data/report")
@@ -1240,6 +1252,12 @@ class BatchRunnerGUI(tk.Tk):
                  bg=C["mantle"], fg=C["sky"]).pack(anchor="w", padx=12, pady=(4, 2))
         self._path_row(body, "transform.sql_dir", self._transform_sql_dir, "Select transform SQL dir")
 
+        def _w_tfm_schema(r):
+            tk.Entry(r, textvariable=self._transform_schema,
+                     bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
+                     relief="flat", font=FONTS["mono_small"], width=16).pack(side="left", fill="x", expand=True, ipady=2)
+        self._ov_row(body, "transform.schema", _w_tfm_schema, note="@{schema} 접두사용")
+
         def _w_on_error(r):
             ttk.Combobox(r, textvariable=self._ov_on_error,
                          values=["stop", "continue"], state="readonly",
@@ -1507,6 +1525,7 @@ class BatchRunnerGUI(tk.Tk):
             "target_schema":  self._target_schema.get(),
             "export_sql_dir": self._export_sql_dir.get(),
             "export_out_dir": self._export_out_dir.get(),
+            "transform_schema":  self._transform_schema.get(),
             "transform_sql_dir": self._transform_sql_dir.get(),
             "report_sql_dir":    self._report_sql_dir.get(),
             "report_out_dir":    self._report_out_dir.get(),
@@ -1546,6 +1565,7 @@ class BatchRunnerGUI(tk.Tk):
 
         self._export_sql_dir.set(snap.get("export_sql_dir", "sql/export"))
         self._export_out_dir.set(snap.get("export_out_dir", "data/export"))
+        self._transform_schema.set(snap.get("transform_schema", ""))
         self._transform_sql_dir.set(snap.get("transform_sql_dir", "sql/transform/duckdb"))
         self._report_sql_dir.set(snap.get("report_sql_dir", "sql/report"))
         self._report_out_dir.set(snap.get("report_out_dir", "data/report"))
@@ -1616,6 +1636,8 @@ class BatchRunnerGUI(tk.Tk):
             "transform": {
                 "sql_dir": self._transform_sql_dir.get(),
                 "on_error": self._ov_on_error.get(),
+                **({"schema": self._transform_schema.get().strip()}
+                   if self._transform_schema.get().strip() else {}),
             },
             "report": {
                 "source": "target",
@@ -1637,7 +1659,7 @@ class BatchRunnerGUI(tk.Tk):
         tgt_type = self._target_type_var.get()
         if tgt_type in ("duckdb", "sqlite3") and self._target_db_path.get().strip():
             cfg["target"]["db_path"] = self._target_db_path.get().strip()
-        if tgt_type == "oracle" and self._target_schema.get().strip():
+        if self._target_schema.get().strip():
             cfg["target"]["schema"] = self._target_schema.get().strip()
         if self._ov_skip_sql.get():
             cfg["report"]["skip_sql"] = True
@@ -1710,6 +1732,7 @@ class BatchRunnerGUI(tk.Tk):
                       sort_keys=False),
             encoding="utf-8"
         )
+        self._jobs[fname] = new_cfg
         self._log_sys(f"Saved: {out_path.name}")
 
     def _on_save_yml_as(self):
@@ -1799,6 +1822,7 @@ class BatchRunnerGUI(tk.Tk):
 
         # Transform / Report paths
         tfm = cfg.get("transform", {})
+        self._transform_schema.set(tfm.get("schema", ""))
         self._transform_sql_dir.set(tfm.get("sql_dir", f"sql/transform/{tgt.get('type', 'duckdb')}"))
         rep = cfg.get("report", {})
         rep_csv = rep.get("export_csv", {})
@@ -1817,12 +1841,13 @@ class BatchRunnerGUI(tk.Tk):
         self._ov_overwrite.set(bool(exp.get("overwrite", False)))
         self._ov_workers.set(int(exp.get("parallel_workers", 1)))
         self._ov_compression.set(str(exp.get("compression", "gzip")))
+        self._ov_load_mode.set(str(cfg.get("load", {}).get("mode", "replace")))
         self._ov_on_error.set(str(tfm.get("on_error", "stop")))
         self._ov_excel.set(bool(rep.get("excel", {}).get("enabled", True)))
         self._ov_csv.set(bool(rep_csv.get("enabled", True)))
         self._ov_max_files.set(int(rep.get("excel", {}).get("max_files", 10)))
         self._ov_skip_sql.set(bool(rep.get("skip_sql", False)))
-        self._ov_union_dir.set("")
+        self._ov_union_dir.set(str(rep.get("csv_union_dir", "")))
 
         # Params
         params = cfg.get("params", {})
@@ -2123,7 +2148,8 @@ class BatchRunnerGUI(tk.Tk):
     # ── Command 빌드 & 미리보기 ──────────────────────────────
     def _build_command_args(self) -> list[str]:
         """yml 쓰기 없이 CLI 인자만 조립 (preview용)"""
-        cmd = ["python", "runner.py", "--job", "_gui_temp.yml"]
+        job_name = self.job_var.get() or "_gui_temp.yml"
+        cmd = ["python", "runner.py", "--job", job_name]
 
         # env
         env_path = self._env_path_var.get().strip()
@@ -2171,7 +2197,8 @@ class BatchRunnerGUI(tk.Tk):
         wd = Path(self._work_dir.get())
         jobs_dir = wd / "jobs"
         jobs_dir.mkdir(parents=True, exist_ok=True)
-        temp_path = jobs_dir / "_gui_temp.yml"
+        job_name = self.job_var.get() or "_gui_temp.yml"
+        temp_path = jobs_dir / job_name
         temp_path.write_text(
             yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
             encoding="utf-8"
@@ -2281,12 +2308,12 @@ class BatchRunnerGUI(tk.Tk):
     # ── 타이틀 깜빡임 ────────────────────────────────────────
     def _flash_title(self, count=6):
         if count <= 0:
-            self.title("ELT Runner  v1.91")
+            self.title(f"ELT Runner  v{APP_VERSION}")
             return
         if count % 2 == 0:
-            self.title(">> Done -- ELT Runner  v1.91")
+            self.title(f">> Done -- ELT Runner  v{APP_VERSION}")
         else:
-            self.title("ELT Runner  v1.91")
+            self.title(f"ELT Runner  v{APP_VERSION}")
         self.after(500, self._flash_title, count - 1)
 
     # ── 커스텀 확인 다이얼로그 공통 ──────────────────────────
