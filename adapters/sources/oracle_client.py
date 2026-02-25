@@ -21,7 +21,7 @@ def init_oracle_client(source_cfg):
         if _oracle_client_initialized:
             return _oracle_client_mode
 
-        lib = (source_cfg or {}).get("thick", {}).get("instant_client")
+        lib = source_cfg.get("thick", {}).get("instant_client")
         mode = "thin"
 
         if lib:
