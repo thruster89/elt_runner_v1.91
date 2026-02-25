@@ -100,20 +100,33 @@ def extract_params_from_csv(csv_path: Path) -> dict:
     return params
 
 
+def _strip_sql_comments(sql_text: str) -> str:
+    """SQL 단일행 주석(-- ...) 제거. 문자열 리터럴 내부의 --는 보존."""
+    lines = sql_text.splitlines()
+    result = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("--"):
+            continue
+        result.append(line)
+    return "\n".join(result)
+
+
 def detect_used_params(sql_text: str, available_params: dict) -> set:
     """SQL 텍스트에서 실제 사용되는 파라미터 키 집합 반환.
-    :param, ${param}, {#param} 세 가지 문법 감지.
-    문자열 리터럴('...' 안) 내의 :param은 제외."""
-    sql_no_strings = re.sub(r"'[^']*'", "''", sql_text)
+    :param, ${param}, {#param}, @{param} 네 가지 문법 감지.
+    단일행 주석(-- ...)과 문자열 리터럴('...' 안) 내의 파라미터는 제외."""
+    sql_active = _strip_sql_comments(sql_text)
+    sql_no_strings = re.sub(r"'[^']*'", "''", sql_active)
     used = set()
     for k in available_params:
         if re.search(rf'(?<![:\w]):{re.escape(k)}\b', sql_no_strings):
             used.add(k)
-        if f'${{{k}}}' in sql_text:
+        if f'${{{k}}}' in sql_active:
             used.add(k)
-        if f'{{#{k}}}' in sql_text:
+        if f'{{#{k}}}' in sql_active:
             used.add(k)
-        if f'@{{{k}}}' in sql_text:
+        if f'@{{{k}}}' in sql_active:
             used.add(k)
     return used
 
