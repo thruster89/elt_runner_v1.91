@@ -21,37 +21,15 @@ def _sha256_file(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-def _human_size(nbytes: int) -> str:
-    for unit in ("B", "KB", "MB", "GB"):
-        if abs(nbytes) < 1024:
-            return f"{nbytes:.1f}{unit}"
-        nbytes /= 1024
-    return f"{nbytes:.1f}TB"
-
-
-def _collect_csv_info(csv_files, sql_map):
-    """CSV 파일 목록에 대해 테이블 매핑·크기 정보를 수집한다 (stat만 사용, 파일 내용 미읽음)."""
-    items = []
-    for csv_path in csv_files:
-        sqlname = extract_sqlname_from_csv(csv_path)
-        sql_file = sql_map.get(sqlname)
-        table_name = resolve_table_name(sql_file) if sql_file else None
-        size = csv_path.stat().st_size
-        items.append({
-            "csv_file": csv_path.name,
-            "table": table_name,
-            "sql_found": sql_file is not None,
-            "size": size,
-            "size_h": _human_size(size),
-        })
-    return items
-
-
 def run(ctx: RunContext):
     logger = ctx.logger
     job_cfg = ctx.job_config
 
     # logger.info("LOAD stage start")
+
+    if ctx.mode == "plan":
+        logger.info("LOAD stage skipped (plan mode)")
+        return
 
     export_cfg = job_cfg.get("export", {})
     if not export_cfg:
@@ -66,9 +44,6 @@ def run(ctx: RunContext):
     export_base = resolve_path(ctx, export_cfg.get("out_dir", "data/export"))
     export_dir = export_base / ctx.job_name
     if not export_dir.exists():
-        if ctx.mode == "plan":
-            logger.info("LOAD [PLAN] export dir not found: %s (export 실행 후 확인 가능)", export_dir)
-            return
         export_dir = export_base
 
     csv_files = sorted([
@@ -76,10 +51,7 @@ def run(ctx: RunContext):
         if p.is_file() and p.name.endswith((".csv", ".csv.gz"))
     ])
     if not csv_files:
-        if ctx.mode == "plan":
-            logger.info("LOAD [PLAN] CSV 파일 없음 — export 실행 후 확인 가능 (%s)", export_dir)
-        else:
-            logger.warning("No CSV/CSV.GZ files found in %s", export_dir)
+        logger.warning("No CSV/CSV.GZ files found in %s", export_dir)
         return
 
     sql_dir = resolve_path(ctx, export_cfg.get("sql_dir", "sql/export"))
@@ -117,11 +89,6 @@ def run(ctx: RunContext):
     if load_mode not in ("replace", "truncate", "append", "delete"):
         logger.warning("Unknown load.mode=%s, using replace", load_mode)
         load_mode = "replace"
-
-    # ── PLAN 모드: 사전 확인 리포트 ──
-    if ctx.mode == "plan":
-        _run_load_plan(ctx, logger, csv_files, sql_map, tgt_type, schema, load_mode)
-        return
 
     if schema:
         logger.info("LOAD target type=%s | schema=%s | csv_count=%d | load.mode=%s",
@@ -168,39 +135,6 @@ def run(ctx: RunContext):
         conn.close()
 
     # logger.info("LOAD stage end")
-
-
-def _run_load_plan(ctx, logger, csv_files, sql_map, tgt_type, schema, load_mode):
-    """PLAN 모드: 로드 대상 파일 목록·테이블 매핑을 사전 확인한다."""
-    items = _collect_csv_info(csv_files, sql_map)
-
-    loadable = [it for it in items if it["sql_found"]]
-    no_sql   = [it for it in items if not it["sql_found"]]
-
-    logger.info("")
-    logger.info("LOAD [PLAN] ── 사전 확인 리포트 ──")
-    logger.info("  Target     : %s%s", tgt_type,
-                f" (schema={schema})" if schema else "")
-    logger.info("  Load Mode  : %s", load_mode)
-    logger.info("  CSV Dir    : %s", csv_files[0].parent if csv_files else "?")
-    total_size = sum(it["size"] for it in loadable)
-    logger.info("  Total Files: %d  (loadable=%d, no_sql=%d)",
-                len(items), len(loadable), len(no_sql))
-    logger.info("  Total Size : %s", _human_size(total_size))
-    logger.info("")
-
-    for i, it in enumerate(loadable, 1):
-        logger.info("  [%d/%d] %s → %s  (%s)",
-                     i, len(loadable), it["csv_file"], it["table"], it["size_h"])
-
-    if no_sql:
-        logger.info("")
-        logger.info("  ── SQL 매핑 없음 (스킵 예정) ──")
-        for it in no_sql:
-            logger.info("    %s  (%s)", it["csv_file"], it["size_h"])
-
-    logger.info("")
-    logger.info("LOAD [PLAN] 완료 — 실제 로드는 run 모드에서 실행하세요.")
 
 
 def _run_load_loop(ctx, logger, csv_files, sql_map, tgt_type, load_fn):

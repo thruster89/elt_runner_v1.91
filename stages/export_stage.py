@@ -13,7 +13,7 @@ from adapters.sources.oracle_client import init_oracle_client, get_oracle_conn
 from adapters.sources.vertica_client import get_vertica_conn
 from engine.context import RunContext
 from engine.path_utils import resolve_path
-from engine.sql_utils import sort_sql_files, render_sql, detect_used_params, _strip_sql_comments
+from engine.sql_utils import sort_sql_files, render_sql, detect_used_params
 from engine.runtime_state import stop_event
 
 
@@ -162,14 +162,7 @@ def sanitize_sql(sql: str) -> str:
     return sql
 
 
-def build_csv_name(sqlname: str, host: str, params: dict, ext: str,
-                   name_style: str = "full") -> str:
-    """
-    CSV 파일명 생성.
-    name_style:
-      "full"    — key_value 형태 (기본, 현행)  예: sql__host__clsYymm_202003.csv
-      "compact" — value만 사용                  예: sql__host__202003.csv
-    """
+def build_csv_name(sqlname: str, host: str, params: dict, ext: str) -> str:
     parts = [sqlname]
 
     if host:
@@ -177,10 +170,7 @@ def build_csv_name(sqlname: str, host: str, params: dict, ext: str,
 
     for k in sorted(params.keys()):
         v = str(params[k]).replace(" ", "_")
-        if name_style == "compact":
-            parts.append(v)
-        else:
-            parts.append(f"{k}_{v}")
+        parts.append(f"{k}_{v}")
 
     return "__".join(parts) + f".{ext}"
 
@@ -228,7 +218,7 @@ def _make_task_key(sql_file: Path, param_set: dict) -> str:
 # ---------------------------
 # Plan mode: Dryrun report
 # ---------------------------
-def run_plan(ctx, sql_files, export_cfg, out_dir, ext, name_style="full"):
+def run_plan(ctx, sql_files, export_cfg, out_dir, ext):
     logger = ctx.logger
     source_sel = ctx.job_config.get("source", {})
     host_name = source_sel.get("host", "")
@@ -251,7 +241,6 @@ def run_plan(ctx, sql_files, export_cfg, out_dir, ext, name_style="full"):
                 host=host_name,
                 params=param_set,
                 ext=ext,
-                name_style=name_style,
             )
             out_file = out_dir / csv_name
 
@@ -262,9 +251,8 @@ def run_plan(ctx, sql_files, export_cfg, out_dir, ext, name_style="full"):
                 warnings.append("no SELECT found or first statement is not SELECT")
 
             # 치환 안 된 파라미터 패턴 감지 (${xxx}, :xxx, {#xxx})
-            # 주석 행과 문자열 리터럴('...' 안) 내용을 제거한 뒤 검사 → 오탐 방지
-            rendered_active = _strip_sql_comments(rendered)
-            sql_no_strings = re.sub(r"'[^']*'", "''", rendered_active)
+            # 문자열 리터럴('...' 안) 내용을 제거한 뒤 검사 → :MI, :SS 등 오탐 방지
+            sql_no_strings = re.sub(r"'[^']*'", "''", rendered)
             leftover = re.findall(r'\$\{[^}]+\}|\{#[^}]+\}|(?<!\:)\:[a-zA-Z_]\w*', sql_no_strings)
             if leftover:
                 warnings.append(f"suspected unresolved parameter: {leftover}")
@@ -504,7 +492,6 @@ def run(ctx: RunContext):
     overwrite = export_cfg.get("overwrite", False)
     backup_keep = export_cfg.get("backup_keep", 10)
     parallel_workers = export_cfg.get("parallel_workers", 1)
-    name_style = export_cfg.get("csv_name_style", "full")
 
     ext = "csv.gz" if compression == "gzip" else "csv"
 
@@ -512,7 +499,7 @@ def run(ctx: RunContext):
     # PLAN 모드: dryrun report만 생성하고 종료
     # ----------------------------------------
     if ctx.mode == "plan":
-        run_plan(ctx, sql_files, export_cfg, out_dir, ext, name_style=name_style)
+        run_plan(ctx, sql_files, export_cfg, out_dir, ext)
         return
 
     # ----------------------------------------
@@ -558,7 +545,6 @@ def run(ctx: RunContext):
                 host=host_name,
                 params=param_set,
                 ext=ext,
-                name_style=name_style,
             )
 
             out_file = out_dir / csv_name

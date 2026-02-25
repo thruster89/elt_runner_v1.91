@@ -100,33 +100,18 @@ def extract_params_from_csv(csv_path: Path) -> dict:
     return params
 
 
-def _strip_sql_comments(sql_text: str) -> str:
-    """SQL 단일행 주석(-- ...) 제거. 문자열 리터럴 내부의 --는 보존."""
-    lines = sql_text.splitlines()
-    result = []
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith("--"):
-            continue
-        result.append(line)
-    return "\n".join(result)
-
-
 def detect_used_params(sql_text: str, available_params: dict) -> set:
     """SQL 텍스트에서 실제 사용되는 파라미터 키 집합 반환.
-    :param, ${param}, {#param}, @{param} 네 가지 문법 감지.
-    단일행 주석(-- ...)과 문자열 리터럴('...' 안) 내의 파라미터는 제외."""
-    sql_active = _strip_sql_comments(sql_text)
-    sql_no_strings = re.sub(r"'[^']*'", "''", sql_active)
+    :param, ${param}, {#param} 세 가지 문법 감지.
+    문자열 리터럴('...' 안) 내의 :param은 제외."""
+    sql_no_strings = re.sub(r"'[^']*'", "''", sql_text)
     used = set()
     for k in available_params:
         if re.search(rf'(?<![:\w]):{re.escape(k)}\b', sql_no_strings):
             used.add(k)
-        if f'${{{k}}}' in sql_active:
+        if f'${{{k}}}' in sql_text:
             used.add(k)
-        if f'{{#{k}}}' in sql_active:
-            used.add(k)
-        if f'@{{{k}}}' in sql_active:
+        if f'{{#{k}}}' in sql_text:
             used.add(k)
     return used
 
@@ -178,12 +163,10 @@ def _split_sql_tokens(sql_text: str):
 
 def render_sql(sql_text: str, params: dict) -> str:
     """
-    SQL 텍스트에 파라미터 치환. 네 가지 문법 지원:
+    SQL 텍스트에 파라미터 치환. 세 가지 문법 지원:
       ${param}  — 값 그대로 치환 (raw). 리터럴 내부 포함 전체 대상.
                   사용자가 직접 따옴표를 제어: '${setl_ym}' → '202003'
       {#param}  — ${param} 과 동일 (raw).
-      @{param}  — 스키마 접두사 전용. 값이 있으면 "값." 으로 치환 (점 자동 추가),
-                  값이 없거나 빈 문자열이면 통째로 제거 (빈 문자열 치환).
       :param    — 자동 싱글쿼트 감싸서 치환. 리터럴 외부에서만 동작.
                   :clsYymm → '202003'
                   ::int, 'HH24:MI:SS' 등은 치환하지 않음.
@@ -193,13 +176,6 @@ def render_sql(sql_text: str, params: dict) -> str:
 
     # 긴 이름부터 치환 (부분 매칭 방지)
     keys = sorted(params.keys(), key=len, reverse=True)
-
-    # @{param} — 스키마 접두사 치환: 값 있으면 "값.", 없으면 ""
-    for k in keys:
-        token = f"@{{{k}}}"
-        if token in sql_text:
-            v = str(params[k]).strip()
-            sql_text = sql_text.replace(token, f"{v}." if v else "")
 
     # ${param}, {#param} 은 리터럴 내부에서도 사용할 일이 없으므로 전체 치환 (raw)
     for k in keys:
