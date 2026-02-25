@@ -312,7 +312,8 @@ def _run_excel_export(ctx, report_cfg, cfg, csv_files: list):
                 # 컬럼 너비
                 for col_idx, col_name in enumerate(df.columns, start=1):
                     col_series = df.iloc[:, col_idx - 1].astype(str)
-                    max_len = max(col_series.str.len().max(), len(str(col_name)))
+                    str_max = col_series.str.len().max()
+                    max_len = max(str_max if pd.notna(str_max) else 0, len(str(col_name)))
                     ws.column_dimensions[get_column_letter(col_idx)].width = min(int(max_len * 1.2) + 2, 50)
 
 
