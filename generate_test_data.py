@@ -1,5 +1,5 @@
 """
-ELT Runner v1.91 — 통합 테스트 데이터 생성
+ELT Runner — 통합 테스트 데이터 생성
 보험계약 관리 시나리오 (10개 테이블, ~25만 행)
 
 사용법:  python generate_test_data.py

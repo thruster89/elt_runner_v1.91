@@ -1,5 +1,5 @@
 """
-batch_runner_gui.py  ─  Tkinter GUI for ELT Runner v1.91
+batch_runner_gui.py  ─  Tkinter GUI for ELT Runner
 실행: python batch_runner_gui.py   (batch_runner 프로젝트 루트에서)
 """
 
@@ -14,6 +14,17 @@ import json
 import yaml
 from pathlib import Path
 from datetime import datetime
+
+# ─────────────────────────────────────────────────────────────
+# 버전 (VERSION 파일에서 읽기)
+# ─────────────────────────────────────────────────────────────
+def _read_version() -> str:
+    vf = Path(__file__).resolve().parent / "VERSION"
+    if vf.exists():
+        return vf.read_text(encoding="utf-8").strip()
+    return "0.0"
+
+APP_VERSION = _read_version()
 
 # ─────────────────────────────────────────────────────────────
 # 색상 팔레트 11종
@@ -634,7 +645,7 @@ STAGE_CONFIG = [
 class BatchRunnerGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("ELT Runner  v1.91")
+        self.title(f"ELT Runner  v{APP_VERSION}")
         self.geometry("1340x800")
         self.minsize(1000, 620)
         self.configure(bg=C["base"])
@@ -2297,12 +2308,12 @@ class BatchRunnerGUI(tk.Tk):
     # ── 타이틀 깜빡임 ────────────────────────────────────────
     def _flash_title(self, count=6):
         if count <= 0:
-            self.title("ELT Runner  v1.91")
+            self.title(f"ELT Runner  v{APP_VERSION}")
             return
         if count % 2 == 0:
-            self.title(">> Done -- ELT Runner  v1.91")
+            self.title(f">> Done -- ELT Runner  v{APP_VERSION}")
         else:
-            self.title("ELT Runner  v1.91")
+            self.title(f"ELT Runner  v{APP_VERSION}")
         self.after(500, self._flash_title, count - 1)
 
     # ── 커스텀 확인 다이얼로그 공통 ──────────────────────────

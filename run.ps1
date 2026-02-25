@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
-.SYNOPSIS  ELT Runner v1.90 - CLI/GUI runner
+.SYNOPSIS  ELT Runner - CLI/GUI runner (version read from VERSION file)
 .EXAMPLE   .\run.ps1 -GUI
 .EXAMPLE   .\run.ps1 -Job job_oracle.yml -Param clsYymm=202406
 .EXAMPLE   .\run.ps1 -Job job_oracle.yml -Param clsYymm=202401:202406 -Mode plan

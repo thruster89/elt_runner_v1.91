@@ -1,6 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-# ELT Runner v1.90 — PyInstaller spec
+# ELT Runner — PyInstaller spec (version read from VERSION file)
 # 빌드: pyinstaller elt_runner.spec  (또는 build.bat / build.ps1)
+
+from pathlib import Path as _P
+APP_VERSION = (_P(__file__).resolve().parent / "VERSION").read_text().strip()
 
 block_cipher = None
 

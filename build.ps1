@@ -7,9 +7,12 @@ function Step($n,$m){ Write-Host "[$n/5] $m" -ForegroundColor Cyan }
 function OK($m)     { Write-Host "      $m"  -ForegroundColor Green }
 function Err($m)    { Write-Host "[ERROR] $m" -ForegroundColor Red; Read-Host; exit 1 }
 
+$AppVer = (Get-Content "$PSScriptRoot\VERSION" -ErrorAction SilentlyContinue).Trim()
+if (-not $AppVer) { $AppVer = "0.0" }
+
 Write-Host ""
 Write-Host " =====================================================" -ForegroundColor Cyan
-Write-Host "   ELT Runner v1.90  --  PowerShell EXE Build"        -ForegroundColor Cyan
+Write-Host "   ELT Runner v$AppVer  --  PowerShell EXE Build"      -ForegroundColor Cyan
 Write-Host " =====================================================" -ForegroundColor Cyan
 Write-Host ""
 
