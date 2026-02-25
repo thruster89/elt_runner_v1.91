@@ -1708,6 +1708,7 @@ class BatchRunnerGUI(tk.Tk):
                       sort_keys=False),
             encoding="utf-8"
         )
+        self._jobs[fname] = new_cfg
         self._log_sys(f"Saved: {out_path.name}")
 
     def _on_save_yml_as(self):
@@ -1815,12 +1816,13 @@ class BatchRunnerGUI(tk.Tk):
         self._ov_overwrite.set(bool(exp.get("overwrite", False)))
         self._ov_workers.set(int(exp.get("parallel_workers", 1)))
         self._ov_compression.set(str(exp.get("compression", "gzip")))
+        self._ov_load_mode.set(str(cfg.get("load", {}).get("mode", "replace")))
         self._ov_on_error.set(str(tfm.get("on_error", "stop")))
         self._ov_excel.set(bool(rep.get("excel", {}).get("enabled", True)))
         self._ov_csv.set(bool(rep_csv.get("enabled", True)))
         self._ov_max_files.set(int(rep.get("excel", {}).get("max_files", 10)))
         self._ov_skip_sql.set(bool(rep.get("skip_sql", False)))
-        self._ov_union_dir.set("")
+        self._ov_union_dir.set(str(rep.get("csv_union_dir", "")))
 
         # Params
         params = cfg.get("params", {})
