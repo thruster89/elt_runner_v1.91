@@ -2056,7 +2056,8 @@ class BatchRunnerGUI(tk.Tk):
     # ── Command 빌드 & 미리보기 ──────────────────────────────
     def _build_command_args(self) -> list[str]:
         """yml 쓰기 없이 CLI 인자만 조립 (preview용)"""
-        cmd = ["python", "runner.py", "--job", "_gui_temp.yml"]
+        job_name = self.job_var.get() or "_gui_temp.yml"
+        cmd = ["python", "runner.py", "--job", job_name]
 
         # env
         env_path = self._env_path_var.get().strip()
@@ -2104,7 +2105,8 @@ class BatchRunnerGUI(tk.Tk):
         wd = Path(self._work_dir.get())
         jobs_dir = wd / "jobs"
         jobs_dir.mkdir(parents=True, exist_ok=True)
-        temp_path = jobs_dir / "_gui_temp.yml"
+        job_name = self.job_var.get() or "_gui_temp.yml"
+        temp_path = jobs_dir / job_name
         temp_path.write_text(
             yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
             encoding="utf-8"
