@@ -21,28 +21,17 @@ def _sha256_file(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-def _human_size(nbytes: int) -> str:
-    for unit in ("B", "KB", "MB", "GB"):
-        if abs(nbytes) < 1024:
-            return f"{nbytes:.1f}{unit}"
-        nbytes /= 1024
-    return f"{nbytes:.1f}TB"
-
-
 def _collect_csv_info(csv_files, sql_map):
-    """CSV 파일 목록에 대해 테이블 매핑·크기 정보를 수집한다."""
+    """CSV 파일 목록에 대해 테이블 매핑 정보를 수집한다."""
     items = []
     for csv_path in csv_files:
         sqlname = extract_sqlname_from_csv(csv_path)
         sql_file = sql_map.get(sqlname)
         table_name = resolve_table_name(sql_file) if sql_file else None
-        size = csv_path.stat().st_size
         items.append({
             "csv_file": csv_path.name,
             "table": table_name,
             "sql_found": sql_file is not None,
-            "size": size,
-            "size_h": _human_size(size),
         })
     return items
 
@@ -171,12 +160,11 @@ def run(ctx: RunContext):
 
 
 def _run_load_plan(ctx, logger, csv_files, sql_map, tgt_type, schema, load_mode):
-    """PLAN 모드: 로드 대상 파일 목록·테이블 매핑·크기를 사전 확인한다."""
+    """PLAN 모드: 로드 대상 파일 목록·테이블 매핑을 사전 확인한다."""
     items = _collect_csv_info(csv_files, sql_map)
 
     loadable = [it for it in items if it["sql_found"]]
     no_sql   = [it for it in items if not it["sql_found"]]
-    total_size = sum(it["size"] for it in loadable)
 
     logger.info("")
     logger.info("LOAD [PLAN] ── 사전 확인 리포트 ──")
@@ -186,18 +174,17 @@ def _run_load_plan(ctx, logger, csv_files, sql_map, tgt_type, schema, load_mode)
     logger.info("  CSV Dir    : %s", csv_files[0].parent if csv_files else "?")
     logger.info("  Total Files: %d  (loadable=%d, no_sql=%d)",
                 len(items), len(loadable), len(no_sql))
-    logger.info("  Total Size : %s", _human_size(total_size))
     logger.info("")
 
     for i, it in enumerate(loadable, 1):
-        logger.info("  [%d/%d] %s → %s  (%s)",
-                     i, len(loadable), it["csv_file"], it["table"], it["size_h"])
+        logger.info("  [%d/%d] %s → %s",
+                     i, len(loadable), it["csv_file"], it["table"])
 
     if no_sql:
         logger.info("")
         logger.info("  ── SQL 매핑 없음 (스킵 예정) ──")
         for it in no_sql:
-            logger.info("    %s  (%s)", it["csv_file"], it["size_h"])
+            logger.info("    %s", it["csv_file"])
 
     logger.info("")
     logger.info("LOAD [PLAN] 완료 — 실제 로드는 run 모드에서 실행하세요.")
