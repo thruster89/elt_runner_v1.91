@@ -665,6 +665,7 @@ class BatchRunnerGUI(tk.Tk):
         self._export_sql_dir  = tk.StringVar(value="sql/export")
         self._export_out_dir  = tk.StringVar(value="data/export")
         # Transform / Report paths
+        self._transform_schema  = tk.StringVar(value="")
         self._transform_sql_dir = tk.StringVar(value="sql/transform/duckdb")
         self._report_sql_dir    = tk.StringVar(value="sql/report")
         self._report_out_dir    = tk.StringVar(value="data/report")
@@ -1238,6 +1239,12 @@ class BatchRunnerGUI(tk.Tk):
                  bg=C["mantle"], fg=C["sky"]).pack(anchor="w", padx=12, pady=(4, 2))
         self._path_row(body, "transform.sql_dir", self._transform_sql_dir, "Select transform SQL dir")
 
+        def _w_tfm_schema(r):
+            tk.Entry(r, textvariable=self._transform_schema,
+                     bg=C["surface0"], fg=C["text"], insertbackground=C["text"],
+                     relief="flat", font=FONTS["mono_small"], width=16).pack(side="left", fill="x", expand=True, ipady=2)
+        self._ov_row(body, "transform.schema", _w_tfm_schema, note="@{schema} 접두사용")
+
         def _w_on_error(r):
             ttk.Combobox(r, textvariable=self._ov_on_error,
                          values=["stop", "continue"], state="readonly",
@@ -1505,6 +1512,7 @@ class BatchRunnerGUI(tk.Tk):
             "target_schema":  self._target_schema.get(),
             "export_sql_dir": self._export_sql_dir.get(),
             "export_out_dir": self._export_out_dir.get(),
+            "transform_schema":  self._transform_schema.get(),
             "transform_sql_dir": self._transform_sql_dir.get(),
             "report_sql_dir":    self._report_sql_dir.get(),
             "report_out_dir":    self._report_out_dir.get(),
@@ -1544,6 +1552,7 @@ class BatchRunnerGUI(tk.Tk):
 
         self._export_sql_dir.set(snap.get("export_sql_dir", "sql/export"))
         self._export_out_dir.set(snap.get("export_out_dir", "data/export"))
+        self._transform_schema.set(snap.get("transform_schema", ""))
         self._transform_sql_dir.set(snap.get("transform_sql_dir", "sql/transform/duckdb"))
         self._report_sql_dir.set(snap.get("report_sql_dir", "sql/report"))
         self._report_out_dir.set(snap.get("report_out_dir", "data/report"))
@@ -1614,6 +1623,8 @@ class BatchRunnerGUI(tk.Tk):
             "transform": {
                 "sql_dir": self._transform_sql_dir.get(),
                 "on_error": self._ov_on_error.get(),
+                **({"schema": self._transform_schema.get().strip()}
+                   if self._transform_schema.get().strip() else {}),
             },
             "report": {
                 "source": "target",
@@ -1635,7 +1646,7 @@ class BatchRunnerGUI(tk.Tk):
         tgt_type = self._target_type_var.get()
         if tgt_type in ("duckdb", "sqlite3") and self._target_db_path.get().strip():
             cfg["target"]["db_path"] = self._target_db_path.get().strip()
-        if tgt_type == "oracle" and self._target_schema.get().strip():
+        if self._target_schema.get().strip():
             cfg["target"]["schema"] = self._target_schema.get().strip()
         if self._ov_skip_sql.get():
             cfg["report"]["skip_sql"] = True
@@ -1798,6 +1809,7 @@ class BatchRunnerGUI(tk.Tk):
 
         # Transform / Report paths
         tfm = cfg.get("transform", {})
+        self._transform_schema.set(tfm.get("schema", ""))
         self._transform_sql_dir.set(tfm.get("sql_dir", f"sql/transform/{tgt.get('type', 'duckdb')}"))
         rep = cfg.get("report", {})
         rep_csv = rep.get("export_csv", {})
