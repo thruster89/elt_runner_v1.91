@@ -62,9 +62,10 @@ def run(ctx: RunContext):
         conn.execute(f'SET schema = \'{schema}\'')
         logger.info("TRANSFORM SET schema = '%s'", schema)
 
-    # schema를 params에 주입 → SQL에서 ${schema}.tablename 사용 가능
-    if schema:
-        ctx.params.setdefault("schema", schema)
+    # schema를 params에 주입
+    # SQL에서 ${schema}.tablename 또는 @{schema}tablename 사용 가능
+    # @{schema} 사용 시: 값이 있으면 "schema." 으로, 없으면 "" 으로 치환
+    ctx.params.setdefault("schema", schema or "")
 
     logger.info("TRANSFORM target=%s | sql_count=%d | on_error=%s", label, len(sql_files), on_error)
 
