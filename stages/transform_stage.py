@@ -56,6 +56,12 @@ def run(ctx: RunContext):
 
     conn, conn_type, label = connect_target(ctx, target_cfg)
 
+    # DuckDB: schema가 설정되어 있으면 세션 기본 스키마 지정
+    schema = target_cfg.get("schema")
+    if conn_type == "duckdb" and schema:
+        conn.execute(f'SET schema = \'{schema}\'')
+        logger.info("TRANSFORM SET schema = '%s'", schema)
+
     logger.info("TRANSFORM target=%s | sql_count=%d | on_error=%s", label, len(sql_files), on_error)
 
     try:
